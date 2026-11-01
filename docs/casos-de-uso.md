@@ -10,10 +10,10 @@ Este servicio administra los usuarios finales, su autenticación, los procesos l
 
 | ID | Caso de uso | Actor / disparador | Resultado esperado |
 | --- | --- | --- | --- |
-| TUR-01 | Registrar usuario final | Usuario desde Android | Valida `login`, `password`, `firstName`, `lastName`, `email`, `imageUrl` opcional y `langKey`; crea un usuario activo con contraseña hasheada, sin permitir elegir ID, autoridades ni datos de auditoría. |
-| TUR-02 | Iniciar sesión | Usuario desde Android | Verifica credenciales y emite el JWT propio de la aplicación; el JWT técnico de cátedra nunca se entrega al cliente. |
+| TUR-01 | Registrar usuario final | Usuario desde Android | Valida `login`, `password`, `firstName`, `lastName`, `email`, `imageUrl` opcional y `langKey`; crea un usuario activo con contraseña hasheada con Argon2id, sin permitir elegir ID, autoridades ni datos de auditoría. |
+| TUR-02 | Iniciar sesión | Usuario desde Android | Verifica la contraseña contra su hash Argon2id o BCrypt (para cuentas existentes); si la cuenta usa BCrypt, la migra a Argon2id al autenticarse correctamente. Emite el JWT propio de la aplicación; el JWT técnico de cátedra nunca se entrega al cliente. |
 | TUR-03 | Consultar turnos disponibles | Usuario autenticado | Obtiene agenda vigente desde catálogo y ocupaciones por REST desde cátedra; calcula horarios libres para profesional y fecha. |
-| TUR-04 | Bloquear temporalmente un turno | Usuario autenticado | Valida los datos vigentes, solicita el hold REST y conserva localmente `holdId`, `reservationProcessId`, `expiresAt` y el usuario propietario. |
+| TUR-04 | Bloquear temporalmente un turno | Usuario autenticado | Valida los datos vigentes, solicita el hold REST y conserva localmente `holdId`, `reservationProcessId`, `expiresAt` y el usuario propietario. Si se pierde la respuesta `201`, no asume que el hold pertenece al usuario ni repite inmediatamente el POST: consulta las ocupaciones del profesional y la fecha. |
 | TUR-05 | Iniciar confirmación del hold | Usuario propietario | Envía identificador estable del usuario, nombre y apellido al endpoint REST de confirmación; registra `WAITING_FOR_PHONE`. La respuesta `202` no equivale a una reserva confirmada. |
 | TUR-06 | Recibir solicitud de teléfono | Kafka `AdditionalInformationRequested` | Asocia la solicitud al proceso y persiste su `eventId` como `requestEventId` para responder. |
 | TUR-07 | Enviar teléfono solicitado | Usuario propietario desde Android | Valida el número y publica `AdditionalInformationSubmitted` con los identificadores requeridos y message key `reservationProcessId`. |
@@ -23,14 +23,16 @@ Este servicio administra los usuarios finales, su autenticación, los procesos l
 | TUR-11 | Consultar mis reservas | Usuario autenticado | Devuelve únicamente reservas asociadas a su identidad local, aunque la API de cátedra devuelva reservas de toda la cuenta técnica. |
 | TUR-12 | Cancelar mi reserva confirmada | Usuario propietario | Comprueba la propiedad y el estado, solicita la cancelación REST y guarda el resultado; una cancelación ya realizada es idempotente. |
 | TUR-13 | Procesar cancelación notificada | Kafka `AppointmentCancelled` | Converge el estado local de la reserva con el central sin repetir efectos. |
-| TUR-14 | Recuperar operaciones pendientes | Reinicio, timeout o conexión recuperada | Reconcilia por identificadores persistidos antes de repetir acciones con efectos; limita y registra los reintentos. |
+| TUR-14 | Recuperar operaciones pendientes | Reinicio, timeout o conexión recuperada | Reconcilia por identificadores persistidos antes de repetir acciones con efectos; limita y registra los reintentos. Si se perdió la respuesta inicial de creación del hold y no hay identificadores, consulta ocupaciones: ante `HELD` espera hasta el `expiresAt` informado y vuelve a consultar sin asumir propiedad; ante `CONFIRMED` cierra el intento; si no hay ocupación, intenta crear un nuevo hold con reintentos limitados y contemplando `409` por concurrencia. |
 | TUR-15 | Impedir acceso cruzado entre usuarios | Cualquier consulta o acción protegida | Autoriza según la identidad del JWT y la propiedad local, nunca según un ID de usuario enviado libremente por el cliente. |
 
 ## Reglas compartidas
 
 - TUR-01 y TUR-02 **pertenecen a este backend**. `backend-catalogo/` valida los JWT necesarios para sus APIs protegidas; el contrato concreto de autenticación entre servicios deberá documentarse al implementarlo.
+- Argon2id es el algoritmo para contraseñas nuevas; BCrypt solo permite verificar y actualizar contraseñas antiguas si existen. Se almacena un único hash por usuario, nunca la contraseña en claro ni dos hashes paralelos. La verificación del JWT es independiente del hash de contraseñas.
 - Cada proceso y reserva local conserva su propietario. Para `externalPatientId` se usa un identificador estable de ese usuario dentro de la aplicación; `groupId` identifica solo la cuenta técnica ante cátedra.
 - El hold vence en el instante `expiresAt` informado por cátedra: guardarlo localmente no amplía su vigencia.
+- No existe idempotencia ni consulta por identificador para recuperar un hold cuya respuesta `201` se perdió. El TTL predeterminado es de diez minutos desde la creación en el servidor, pero esperar diez minutos desde el timeout no garantiza que el slot esté disponible.
 - Los eventos Kafka pueden repetirse. Se deduplican por `eventId` y no se retrocede desde un estado final; el rechazo de teléfono permite un nuevo intento válido mientras el proceso siga vigente.
 - Si catálogo está indisponible no se inician operaciones que necesiten agenda vigente; pueden seguir atendiéndose las que dependan solo de datos propios cuando sea posible.
 - La cuenta técnica se registra una sola vez por Postman o equivalente. Ambos backends usan sus secretos externalizados; el JWT técnico no se expone a Android.
