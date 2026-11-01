@@ -12,4 +12,10 @@ public class Argon2PasswordHasher implements PasswordHasher {
     public String hash(String rawPassword) {
         return encoder.encode(rawPassword);
     }
+
+    @Override
+    public boolean matches(String rawPassword, String passwordHash) {
+        return passwordHash != null && passwordHash.startsWith("$argon2id$")
+                && encoder.matches(rawPassword, passwordHash);
+    }
 }
