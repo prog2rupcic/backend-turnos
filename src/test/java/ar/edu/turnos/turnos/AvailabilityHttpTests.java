@@ -163,6 +163,63 @@ class AvailabilityHttpTests extends AbstractIntegrationTest {
     }
 
     @Test
+    void invalidCatalogPayloadsAreNeverTreatedAsFree() throws Exception {
+        CATALOG_REPLY.set(new Reply(200, "{}"));
+        mockMvc.perform(availability().header("Authorization", "Bearer " + userJwt))
+                .andExpect(status().isBadGateway());
+        CATALOG_REPLY.set(new Reply(200, """
+                {"id":15,"enabled":true,"category":{"enabled":true},"weeklySchedules":[null]}
+                """));
+        mockMvc.perform(availability().header("Authorization", "Bearer " + userJwt))
+                .andExpect(status().isBadGateway());
+        CATALOG_REPLY.set(new Reply(200, """
+                {"id":15,"enabled":true,"category":{"enabled":true},"weeklySchedules":[]}
+                """));
+        mockMvc.perform(availability().header("Authorization", "Bearer " + userJwt))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.availableStartTimes.length()").value(0));
+    }
+
+    @Test
+    void catalogClientErrorsAreDistinguishedFromAuthenticationFailures() throws Exception {
+        CATALOG_REPLY.set(new Reply(400, "{}"));
+        mockMvc.perform(availability().header("Authorization", "Bearer " + userJwt))
+                .andExpect(status().isBadGateway());
+        CATALOG_REPLY.set(new Reply(403, "{}"));
+        mockMvc.perform(availability().header("Authorization", "Bearer " + userJwt))
+                .andExpect(status().isServiceUnavailable());
+    }
+
+    @Test
+    void inconsistentCentralPayloadsFailClosed() throws Exception {
+        CATEDRA_REPLY.set(new Reply(200, """
+                {"professionalId":16,"from":"%s","to":"%s","occupancies":[]}
+                """.formatted(date, date)));
+        mockMvc.perform(availability().header("Authorization", "Bearer " + userJwt))
+                .andExpect(status().isBadGateway());
+        CATEDRA_REPLY.set(new Reply(200, """
+                {"professionalId":15,"from":"%s","to":"%s","occupancies":[]}
+                """.formatted(date.minusDays(1), date)));
+        mockMvc.perform(availability().header("Authorization", "Bearer " + userJwt))
+                .andExpect(status().isBadGateway());
+        CATEDRA_REPLY.set(new Reply(200, """
+                {"professionalId":15,"from":"%s","to":"%s","occupancies":[null]}
+                """.formatted(date, date)));
+        mockMvc.perform(availability().header("Authorization", "Bearer " + userJwt))
+                .andExpect(status().isBadGateway());
+    }
+
+    @Test
+    void centralClientErrorsAreDistinguishedFromAuthenticationFailures() throws Exception {
+        CATEDRA_REPLY.set(new Reply(400, "{}"));
+        mockMvc.perform(availability().header("Authorization", "Bearer " + userJwt))
+                .andExpect(status().isBadGateway());
+        CATEDRA_REPLY.set(new Reply(403, "{}"));
+        mockMvc.perform(availability().header("Authorization", "Bearer " + userJwt))
+                .andExpect(status().isServiceUnavailable());
+    }
+
+    @Test
     void invalidDateAndUnauthorizedRequestsNeverCallSources() throws Exception {
         mockMvc.perform(availability()).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/professionals/0/availability").param("date", date.toString())
