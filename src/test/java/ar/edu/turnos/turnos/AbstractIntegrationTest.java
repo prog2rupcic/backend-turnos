@@ -2,8 +2,14 @@ package ar.edu.turnos.turnos;
 
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.TestPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
 
+@TestPropertySource(properties = {
+        "turnos.catalog.base-url=http://localhost:1",
+        "turnos.catedra.base-url=http://localhost:1",
+        "turnos.catedra.technical-jwt=test-only-technical-jwt"
+})
 abstract class AbstractIntegrationTest {
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
             .withDatabaseName("turnos")
