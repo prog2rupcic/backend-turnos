@@ -1,5 +1,6 @@
 package ar.edu.turnos.turnos.config;
 
+import ar.edu.turnos.turnos.authorization.infrastructure.security.UserJwtSubject;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import javax.crypto.SecretKey;
@@ -46,18 +47,22 @@ public class SecurityConfiguration {
         decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(JwtValidators.createDefaultWithIssuer(issuer),
                 new JwtClaimValidator<List<String>>("aud", audience -> audience != null
                         && audience.contains("backend-turnos")),
-                new JwtClaimValidator<String>("sub", subject -> subject != null && !subject.isBlank())));
+                new JwtClaimValidator<String>("sub", subject -> UserJwtSubject.userId(subject) != null)));
         return decoder;
     }
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    JwtAuthenticationConverter jwtAuthenticationConverter() {
         var authorities = new JwtGrantedAuthoritiesConverter();
         authorities.setAuthoritiesClaimName("authorities");
         authorities.setAuthorityPrefix("");
         var converter = new JwtAuthenticationConverter();
         converter.setJwtGrantedAuthoritiesConverter(authorities);
+        return converter;
+    }
 
+    @Bean
+    SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationConverter converter) throws Exception {
         return http.csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(requests -> requests

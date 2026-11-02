@@ -26,6 +26,8 @@ Este servicio administra los usuarios finales, su autenticación, los procesos l
 | TUR-14 | Recuperar operaciones pendientes | Reinicio, timeout o conexión recuperada | Reconcilia por identificadores persistidos antes de repetir acciones con efectos; limita y registra los reintentos. Si se perdió la respuesta inicial de creación del hold y no hay identificadores, consulta ocupaciones: ante `HELD` espera hasta el `expiresAt` informado y vuelve a consultar sin asumir propiedad; ante `CONFIRMED` cierra el intento; si no hay ocupación, intenta crear un nuevo hold con reintentos limitados y contemplando `409` por concurrencia. |
 | TUR-15 | Impedir acceso cruzado entre usuarios | Cualquier consulta o acción protegida | Autoriza según la identidad del JWT y la propiedad local, nunca según un ID de usuario enviado libremente por el cliente. |
 
+**Estado de TUR-15:** está implementada la base reutilizable de autorización. El `sub` del JWT válido identifica a `user-{id}` y el caso de uso compara ese ID con el propietario persistido del recurso; ausencia de credenciales devuelve `401` y una propiedad distinta devuelve `403`. Las pruebas HTTP de esta base usan un endpoint exclusivo de test. La verificación de acceso cruzado en procesos y reservas reales queda pendiente de TUR-04/TUR-10/TUR-11/TUR-12, cuando existan sus endpoints y persistencia.
+
 ## Reglas compartidas
 
 - TUR-01 y TUR-02 **pertenecen a este backend**. El JWT de usuario se firma con HS256: `iss=backend-turnos`, `sub=user-{id}`, audiencias `backend-turnos` y `backend-catalogo`, y autoridades en el claim `authorities`. Ambos servicios comparten la clave de firma mediante configuración externa; el JWT técnico de cátedra es independiente.

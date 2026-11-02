@@ -1,5 +1,6 @@
 package ar.edu.turnos.turnos.config;
 
+import ar.edu.turnos.turnos.authorization.application.exception.ResourceAccessDeniedException;
 import ar.edu.turnos.turnos.user.application.exception.UserAlreadyExistsException;
 import ar.edu.turnos.turnos.user.application.exception.InvalidCredentialsException;
 import java.util.List;
@@ -11,6 +12,13 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
+    @ExceptionHandler(ResourceAccessDeniedException.class)
+    ProblemDetail handleResourceAccessDenied(ResourceAccessDeniedException exception) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, exception.getMessage());
+        problem.setProperty("code", "RESOURCE_NOT_OWNED");
+        return problem;
+    }
+
     @ExceptionHandler(InvalidCredentialsException.class)
     ProblemDetail handleInvalidCredentials(InvalidCredentialsException exception) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, exception.getMessage());
