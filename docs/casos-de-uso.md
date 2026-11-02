@@ -11,7 +11,7 @@ Este servicio administra los usuarios finales, su autenticación, los procesos l
 | ID | Caso de uso | Actor / disparador | Resultado esperado |
 | --- | --- | --- | --- |
 | TUR-01 | Registrar usuario final | Usuario desde Android | Valida `login`, `password`, `firstName`, `lastName`, `email`, `imageUrl` opcional y `langKey`; crea un usuario activo con contraseña hasheada con Argon2id, sin permitir elegir ID, autoridades ni datos de auditoría. |
-| TUR-02 | Iniciar sesión | Usuario desde Android | Verifica la contraseña contra su hash Argon2id o BCrypt (para cuentas existentes); si la cuenta usa BCrypt, la migra a Argon2id al autenticarse correctamente. Emite el JWT propio de la aplicación; el JWT técnico de cátedra nunca se entrega al cliente. |
+| TUR-02 | Iniciar sesión | Usuario desde Android | Verifica la contraseña contra su hash Argon2id y comprueba que la cuenta esté activa. Emite un JWT propio de la aplicación válido por una hora, o por siete días con `rememberMe`; el JWT técnico de cátedra nunca se entrega al cliente. |
 | TUR-03 | Consultar turnos disponibles | Usuario autenticado | Obtiene agenda vigente desde catálogo y ocupaciones por REST desde cátedra; calcula horarios libres para profesional y fecha. |
 | TUR-04 | Bloquear temporalmente un turno | Usuario autenticado | Valida los datos vigentes, solicita el hold REST y conserva localmente `holdId`, `reservationProcessId`, `expiresAt` y el usuario propietario. Si se pierde la respuesta `201`, no asume que el hold pertenece al usuario ni repite inmediatamente el POST: consulta las ocupaciones del profesional y la fecha. |
 | TUR-05 | Iniciar confirmación del hold | Usuario propietario | Envía identificador estable del usuario, nombre y apellido al endpoint REST de confirmación; registra `WAITING_FOR_PHONE`. La respuesta `202` no equivale a una reserva confirmada. |
@@ -28,8 +28,8 @@ Este servicio administra los usuarios finales, su autenticación, los procesos l
 
 ## Reglas compartidas
 
-- TUR-01 y TUR-02 **pertenecen a este backend**. `backend-catalogo/` valida los JWT necesarios para sus APIs protegidas; el contrato concreto de autenticación entre servicios deberá documentarse al implementarlo.
-- Argon2id es el algoritmo para contraseñas nuevas; BCrypt solo permite verificar y actualizar contraseñas antiguas si existen. Se almacena un único hash por usuario, nunca la contraseña en claro ni dos hashes paralelos. La verificación del JWT es independiente del hash de contraseñas.
+- TUR-01 y TUR-02 **pertenecen a este backend**. El JWT de usuario se firma con HS256: `iss=backend-turnos`, `sub=user-{id}`, audiencias `backend-turnos` y `backend-catalogo`, y autoridades en el claim `authorities`. Ambos servicios comparten la clave de firma mediante configuración externa; el JWT técnico de cátedra es independiente.
+- Solo se aceptan contraseñas hasheadas con Argon2id; no hay cuentas heredadas con BCrypt que migrar. Se almacena un único hash por usuario, nunca la contraseña en claro. La verificación del JWT es independiente del hash de contraseñas.
 - Cada proceso y reserva local conserva su propietario. Para `externalPatientId` se usa un identificador estable de ese usuario dentro de la aplicación; `groupId` identifica solo la cuenta técnica ante cátedra.
 - El hold vence en el instante `expiresAt` informado por cátedra: guardarlo localmente no amplía su vigencia.
 - No existe idempotencia ni consulta por identificador para recuperar un hold cuya respuesta `201` se perdió. El TTL predeterminado es de diez minutos desde la creación en el servidor, pero esperar diez minutos desde el timeout no garantiza que el slot esté disponible.
