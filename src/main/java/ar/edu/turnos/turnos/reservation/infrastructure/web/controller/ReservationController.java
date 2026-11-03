@@ -1,7 +1,9 @@
 package ar.edu.turnos.turnos.reservation.infrastructure.web.controller;
 
 import ar.edu.turnos.turnos.reservation.application.exception.HoldCreationException;
+import ar.edu.turnos.turnos.reservation.application.exception.HoldConfirmationException;
 import ar.edu.turnos.turnos.reservation.application.service.ReservationService;
+import ar.edu.turnos.turnos.reservation.infrastructure.web.dto.ConfirmHoldResponse;
 import ar.edu.turnos.turnos.reservation.infrastructure.web.dto.CreateHoldRequest;
 import ar.edu.turnos.turnos.reservation.infrastructure.web.dto.CreateHoldResponse;
 import ar.edu.turnos.turnos.reservation.infrastructure.web.mapper.ReservationDtoMapper;
@@ -13,6 +15,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -40,6 +43,15 @@ public class ReservationController {
                 reservationService.createHold(userId, request.professionalId(), request.date(), request.startTime())));
     }
 
+    @PostMapping("/{processId}/confirm")
+    public ResponseEntity<ConfirmHoldResponse> confirm(@PathVariable String processId,
+                                                        @AuthenticationPrincipal Jwt jwt) {
+        long userId = Long.parseLong(jwt.getSubject().substring("user-".length()));
+        var process = reservationService.confirmHold(processId, userId);
+        return ResponseEntity.accepted().body(new ConfirmHoldResponse(process.id(), process.status().name(),
+                process.expiresAt()));
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     ProblemDetail invalidRequest() {
         return problem(HttpStatus.BAD_REQUEST, "INVALID_SLOT", "Datos del turno inválidos");
@@ -54,6 +66,24 @@ public class ReservationController {
             case INVALID_RESPONSE -> HttpStatus.BAD_GATEWAY;
         };
         ProblemDetail result = problem(status, exception.reason().name(), "No se pudo asegurar el turno");
+        if (exception.processId() != null) {
+            result.setProperty("processId", exception.processId());
+        }
+        return result;
+    }
+
+    @ExceptionHandler(HoldConfirmationException.class)
+    ProblemDetail confirmationError(HoldConfirmationException exception) {
+        HttpStatus status = switch (exception.reason()) {
+            case PROCESS_NOT_FOUND, HOLD_NOT_FOUND, PROFESSIONAL_NOT_FOUND -> HttpStatus.NOT_FOUND;
+            case PROCESS_NOT_OWNED -> HttpStatus.FORBIDDEN;
+            case HOLD_EXPIRED -> HttpStatus.GONE;
+            case INVALID_STATE, CONFIRMATION_IN_PROGRESS, SLOT_UNAVAILABLE -> HttpStatus.CONFLICT;
+            case USER_PROFILE_UNAVAILABLE, INTEGRATION_UNAVAILABLE, OUTCOME_UNKNOWN -> HttpStatus.SERVICE_UNAVAILABLE;
+            case INVALID_RESPONSE -> HttpStatus.BAD_GATEWAY;
+            case ALREADY_CONFIRMED -> HttpStatus.ACCEPTED;
+        };
+        ProblemDetail result = problem(status, exception.reason().name(), "No se pudo confirmar el hold");
         if (exception.processId() != null) {
             result.setProperty("processId", exception.processId());
         }

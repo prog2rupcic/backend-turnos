@@ -1,6 +1,8 @@
 package ar.edu.turnos.turnos.reservation.infrastructure.rest;
 
 import ar.edu.turnos.turnos.reservation.application.exception.HoldCreationException;
+import ar.edu.turnos.turnos.reservation.application.exception.HoldConfirmationException;
+import ar.edu.turnos.turnos.reservation.domain.model.ConfirmedHold;
 import ar.edu.turnos.turnos.reservation.domain.model.CreatedHold;
 import ar.edu.turnos.turnos.reservation.domain.ports.out.HoldGateway;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -66,6 +68,62 @@ public class CatedraHoldRestAdapter implements HoldGateway {
         }
     }
 
+    @Override
+    public ConfirmedHold confirm(String holdId, String externalPatientId, String patientFirstName,
+                                 String patientLastName) {
+        if (technicalJwt.isBlank()) {
+            throw new HoldConfirmationException(HoldConfirmationException.Reason.INTEGRATION_UNAVAILABLE);
+        }
+        try {
+            var result = client.post().uri("/api/appointment-holds/{holdId}/confirm", holdId)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + technicalJwt)
+                    .body(new ConfirmRequest(externalPatientId, patientFirstName, patientLastName))
+                    .retrieve().toEntity(ConfirmResponse.class);
+            ConfirmResponse response = result.getBody();
+            if (result.getStatusCode() != HttpStatus.ACCEPTED || response == null
+                    || response.reservationProcessId() == null || response.reservationProcessId().isBlank()
+                    || !"WAITING_FOR_PHONE".equals(response.status()) || response.expiresAt() == null) {
+                throw new HoldConfirmationException(HoldConfirmationException.Reason.OUTCOME_UNKNOWN);
+            }
+            return new ConfirmedHold(response.reservationProcessId(), response.expiresAt());
+        } catch (RestClientResponseException exception) {
+            throw translateConfirmation(exception);
+        } catch (RestClientException _) {
+            // El POST pudo aceptarse aunque la respuesta se haya perdido.
+            throw new HoldConfirmationException(HoldConfirmationException.Reason.OUTCOME_UNKNOWN);
+        }
+    }
+
+    private static HoldConfirmationException translateConfirmation(RestClientResponseException exception) {
+        int status = exception.getStatusCode().value();
+        String code = errorCode(exception);
+        if (status == 401 || status == 403) {
+            return new HoldConfirmationException(HoldConfirmationException.Reason.INTEGRATION_UNAVAILABLE);
+        }
+        if (status == 404 && "HOLD_EXPIRED".equals(code)) {
+            return new HoldConfirmationException(HoldConfirmationException.Reason.HOLD_EXPIRED);
+        }
+        if (status == 404 && "HOLD_NOT_FOUND".equals(code)) {
+            return new HoldConfirmationException(HoldConfirmationException.Reason.HOLD_NOT_FOUND);
+        }
+        if (status == 404 && "PROFESSIONAL_NOT_FOUND".equals(code)) {
+            return new HoldConfirmationException(HoldConfirmationException.Reason.PROFESSIONAL_NOT_FOUND);
+        }
+        if (status == 400 && "INVALID_SLOT".equals(code)) {
+            return new HoldConfirmationException(HoldConfirmationException.Reason.SLOT_UNAVAILABLE);
+        }
+        if (status == 409 && "RESERVATION_PROCESS_ALREADY_CONFIRMED".equals(code)) {
+            return new HoldConfirmationException(HoldConfirmationException.Reason.ALREADY_CONFIRMED);
+        }
+        if (status == 409 && ("SLOT_ALREADY_HELD".equals(code) || "SLOT_ALREADY_RESERVED".equals(code))) {
+            return new HoldConfirmationException(HoldConfirmationException.Reason.SLOT_UNAVAILABLE);
+        }
+        if (status >= 500) {
+            return new HoldConfirmationException(HoldConfirmationException.Reason.OUTCOME_UNKNOWN);
+        }
+        return new HoldConfirmationException(HoldConfirmationException.Reason.INVALID_RESPONSE);
+    }
+
     private static HoldCreationException translate(RestClientResponseException exception) {
         int status = exception.getStatusCode().value();
         if (status == 401 || status == 403) {
@@ -96,6 +154,11 @@ public class CatedraHoldRestAdapter implements HoldGateway {
 
     record HoldRequest(long professionalId, LocalDate date, String startTime, String externalPatientId) { }
 
+    record ConfirmRequest(String externalPatientId, String patientFirstName, String patientLastName) { }
+
     @JsonIgnoreProperties(ignoreUnknown = true)
     record HoldResponse(String holdId, String reservationProcessId, String status, Instant expiresAt) { }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record ConfirmResponse(String reservationProcessId, String status, Instant expiresAt) { }
 }

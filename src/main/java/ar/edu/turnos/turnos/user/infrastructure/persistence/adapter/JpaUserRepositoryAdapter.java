@@ -30,4 +30,9 @@ public class JpaUserRepositoryAdapter implements UserRepository {
     public Optional<User> findByLogin(String login) {
         return repository.findByLogin(login).map(mapper::toDomain);
     }
+
+    @Override
+    public Optional<User> findById(long id) {
+        return repository.findById(id).map(mapper::toDomain);
+    }
 }
