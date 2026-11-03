@@ -1,5 +1,6 @@
 package ar.edu.turnos.turnos;
 
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -67,6 +68,14 @@ class UserRegistrationHttpTests extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"login\":\"a\",\"password\":\"x\"}"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void csrfRemainsActiveOutsideTheStatelessApiPostExceptions() throws Exception {
+        mockMvc.perform(post("/actuator/health"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/actuator/health").with(csrf()))
+                .andExpect(status().isMethodNotAllowed());
     }
 
     private void register(String login, String email) throws Exception {
