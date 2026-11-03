@@ -38,14 +38,20 @@ class ReservationHttpTests extends AbstractIntegrationTest {
     private static final AtomicReference<Reply> CATALOG_REPLY = new AtomicReference<>();
     private static final AtomicReference<Reply> OCCUPANCIES_REPLY = new AtomicReference<>();
     private static final AtomicReference<Reply> HOLD_REPLY = new AtomicReference<>();
+    private static final AtomicReference<Reply> CONFIRM_REPLY = new AtomicReference<>();
     private static final AtomicReference<String> CATALOG_AUTH = new AtomicReference<>();
     private static final AtomicReference<String> OCCUPANCIES_AUTH = new AtomicReference<>();
     private static final AtomicReference<String> HOLD_AUTH = new AtomicReference<>();
     private static final AtomicReference<String> HOLD_BODY = new AtomicReference<>();
+    private static final AtomicReference<String> CONFIRM_AUTH = new AtomicReference<>();
+    private static final AtomicReference<String> CONFIRM_BODY = new AtomicReference<>();
+    private static final AtomicReference<String> CONFIRM_PATH = new AtomicReference<>();
     private static final AtomicInteger OCCUPANCY_CALLS = new AtomicInteger();
     private static final AtomicInteger HOLD_CALLS = new AtomicInteger();
+    private static final AtomicInteger CONFIRM_CALLS = new AtomicInteger();
     private static final AtomicReference<JpaReservationProcessRepository> PROCESS_REPOSITORY = new AtomicReference<>();
     private static final AtomicReference<ReservationProcess.Status> STATUS_AT_POST = new AtomicReference<>();
+    private static final AtomicReference<ReservationProcess.Status> STATUS_AT_CONFIRM = new AtomicReference<>();
 
     static {
         CATALOG.createContext("/api/professionals/", request -> {
@@ -63,6 +69,14 @@ class ReservationHttpTests extends AbstractIntegrationTest {
             HOLD_BODY.set(new String(request.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
             HOLD_CALLS.incrementAndGet();
             send(request, HOLD_REPLY.get());
+        });
+        CATEDRA.createContext("/api/appointment-holds/", request -> {
+            CONFIRM_AUTH.set(request.getRequestHeaders().getFirst("Authorization"));
+            CONFIRM_BODY.set(new String(request.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            CONFIRM_PATH.set(request.getRequestURI().getPath());
+            STATUS_AT_CONFIRM.set(PROCESS_REPOSITORY.get().findAll().getFirst().getStatus());
+            CONFIRM_CALLS.incrementAndGet();
+            send(request, CONFIRM_REPLY.get());
         });
         CATALOG.start();
         CATEDRA.start();
@@ -104,10 +118,18 @@ class ReservationHttpTests extends AbstractIntegrationTest {
         HOLD_REPLY.set(new Reply(201, """
                 {"holdId":"hold-test","reservationProcessId":"process-test","status":"HELD","expiresAt":"%s"}
                 """.formatted(Instant.now().plusSeconds(600))));
+        CONFIRM_REPLY.set(new Reply(202, """
+                {"reservationProcessId":"process-test","status":"WAITING_FOR_PHONE","expiresAt":"%s"}
+                """.formatted(Instant.now().plusSeconds(600))));
         CATALOG_AUTH.set(null);
         OCCUPANCIES_AUTH.set(null);
         HOLD_AUTH.set(null);
         HOLD_BODY.set(null);
+        CONFIRM_AUTH.set(null);
+        CONFIRM_BODY.set(null);
+        CONFIRM_PATH.set(null);
+        CONFIRM_CALLS.set(0);
+        STATUS_AT_CONFIRM.set(null);
         OCCUPANCY_CALLS.set(0);
         HOLD_CALLS.set(0);
         String username = "hold-" + UUID.randomUUID().toString().substring(0, 8);
@@ -149,6 +171,105 @@ class ReservationHttpTests extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.code").value("ALREADY_IN_PROGRESS"))
                 .andExpect(jsonPath("$.processId").value(saved.getId()));
         assertThat(HOLD_CALLS.get()).isEqualTo(1);
+    }
+
+    @Test
+    void confirmsOwnHoldWithTheStoredUserProfileAndDoesNotRepeatCompletedConfirmation() throws Exception {
+        String processId = createHeldProcess();
+        mvc.perform(confirmRequest(processId).header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.id").value(processId))
+                .andExpect(jsonPath("$.status").value("WAITING_FOR_PHONE"));
+
+        assertThat(CONFIRM_AUTH.get()).isEqualTo("Bearer test-only-technical-jwt");
+        assertThat(CONFIRM_PATH.get()).isEqualTo("/api/appointment-holds/hold-test/confirm");
+        assertThat(CONFIRM_BODY.get()).contains("\"externalPatientId\":\"user-" + ownerId + "\"",
+                "\"patientFirstName\":\"Ana\"", "\"patientLastName\":\"Garcia\"");
+        assertThat(STATUS_AT_CONFIRM.get()).isEqualTo(ReservationProcess.Status.CONFIRM_REQUESTING);
+        assertThat(processes.findAll().getFirst().getStatus()).isEqualTo(ReservationProcess.Status.WAITING_FOR_PHONE);
+        assertThat(CONFIRM_CALLS.get()).isEqualTo(1);
+
+        mvc.perform(confirmRequest(processId).header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.status").value("WAITING_FOR_PHONE"));
+        assertThat(CONFIRM_CALLS.get()).isEqualTo(1);
+
+        mvc.perform(createRequest().header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.processId").value(processId));
+        assertThat(HOLD_CALLS.get()).isEqualTo(1);
+    }
+
+    @Test
+    void onlyTheProcessOwnerCanConfirmTheHold() throws Exception {
+        String processId = createHeldProcess();
+        String otherJwt = registerAndLogin("other-" + UUID.randomUUID().toString().substring(0, 8));
+
+        mvc.perform(confirmRequest(processId).header("Authorization", "Bearer " + otherJwt))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("PROCESS_NOT_OWNED"));
+        assertThat(CONFIRM_CALLS.get()).isZero();
+        assertThat(processes.findAll().getFirst().getStatus()).isEqualTo(ReservationProcess.Status.HELD);
+    }
+
+    @Test
+    void confirmationTimeoutIsStoredAsUnknownAndExplicitRetryCanConvergeOnAlreadyConfirmed() throws Exception {
+        String processId = createHeldProcess();
+        CONFIRM_REPLY.set(new Reply(500, "{}"));
+
+        mvc.perform(confirmRequest(processId).header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("OUTCOME_UNKNOWN"))
+                .andExpect(jsonPath("$.processId").value(processId));
+        assertThat(processes.findAll().getFirst().getStatus())
+                .isEqualTo(ReservationProcess.Status.CONFIRM_OUTCOME_UNKNOWN);
+
+        CONFIRM_REPLY.set(new Reply(409, "{\"code\":\"RESERVATION_PROCESS_ALREADY_CONFIRMED\"}"));
+        mvc.perform(confirmRequest(processId).header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.status").value("WAITING_FOR_PHONE"));
+        assertThat(processes.findAll().getFirst().getStatus()).isEqualTo(ReservationProcess.Status.WAITING_FOR_PHONE);
+        assertThat(CONFIRM_CALLS.get()).isEqualTo(2);
+    }
+
+    @Test
+    void expiredHoldBecomesTerminalAndCannotBeConfirmedAgain() throws Exception {
+        String processId = createHeldProcess();
+        CONFIRM_REPLY.set(new Reply(404, "{\"code\":\"HOLD_EXPIRED\"}"));
+
+        mvc.perform(confirmRequest(processId).header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isGone())
+                .andExpect(jsonPath("$.code").value("HOLD_EXPIRED"));
+        assertThat(processes.findAll().getFirst().getStatus()).isEqualTo(ReservationProcess.Status.EXPIRED);
+        mvc.perform(confirmRequest(processId).header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isGone());
+        assertThat(CONFIRM_CALLS.get()).isEqualTo(1);
+    }
+
+    @Test
+    void unavailableTechnicalCredentialsRestoreHeldStateAndMissingJwtIsRejected() throws Exception {
+        String processId = createHeldProcess();
+        CONFIRM_REPLY.set(new Reply(401, "{}"));
+        mvc.perform(confirmRequest(processId).header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("INTEGRATION_UNAVAILABLE"));
+        assertThat(processes.findAll().getFirst().getStatus()).isEqualTo(ReservationProcess.Status.HELD);
+
+        mvc.perform(confirmRequest(processId)).andExpect(status().isUnauthorized());
+        assertThat(CONFIRM_CALLS.get()).isEqualTo(1);
+    }
+
+    @Test
+    void malformedAcceptedResponseIsKeptAsAnUnknownOutcome() throws Exception {
+        String processId = createHeldProcess();
+        CONFIRM_REPLY.set(new Reply(202, "{\"reservationProcessId\":\"different-process\","
+                + "\"status\":\"WAITING_FOR_PHONE\",\"expiresAt\":\"" + Instant.now().plusSeconds(600) + "\"}"));
+
+        mvc.perform(confirmRequest(processId).header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("OUTCOME_UNKNOWN"));
+        assertThat(processes.findAll().getFirst().getStatus())
+                .isEqualTo(ReservationProcess.Status.CONFIRM_OUTCOME_UNKNOWN);
     }
 
     @Test
@@ -328,6 +449,27 @@ class ReservationHttpTests extends AbstractIntegrationTest {
                 .andExpect(status().isBadGateway())
                 .andExpect(jsonPath("$.code").value("INVALID_RESPONSE"));
         assertThat(HOLD_CALLS.get()).isEqualTo(2);
+    }
+
+    private String createHeldProcess() throws Exception {
+        var response = mvc.perform(createRequest().header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isCreated()).andReturn().getResponse();
+        return JsonPath.read(response.getContentAsString(), "$.id");
+    }
+
+    private String registerAndLogin(String username) throws Exception {
+        mvc.perform(post("/api/register").contentType(MediaType.APPLICATION_JSON).content("""
+                {"login":"%s","password":"clave-correcta","firstName":"Otra",
+                "lastName":"Persona","email":"%s@example.com"}
+                """.formatted(username, username))).andExpect(status().isCreated());
+        var response = mvc.perform(post("/api/authenticate").contentType(MediaType.APPLICATION_JSON).content("""
+                {"username":"%s","password":"clave-correcta"}
+                """.formatted(username))).andExpect(status().isOk()).andReturn().getResponse();
+        return JsonPath.read(response.getContentAsString(), "$.id_token");
+    }
+
+    private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder confirmRequest(String processId) {
+        return post("/api/reservation-processes/{processId}/confirm", processId);
     }
 
     @Test

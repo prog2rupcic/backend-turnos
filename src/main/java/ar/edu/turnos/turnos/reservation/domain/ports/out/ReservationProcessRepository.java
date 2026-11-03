@@ -8,6 +8,8 @@ import java.util.Optional;
 public interface ReservationProcessRepository {
     ReservationProcess save(ReservationProcess process);
 
+    Optional<ReservationProcess> findById(String id);
+
     Optional<ReservationProcess> findUnresolved(long ownerUserId, long professionalId, LocalDate date,
                                                 LocalTime startTime);
 }
