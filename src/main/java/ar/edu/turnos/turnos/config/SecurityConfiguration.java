@@ -1,8 +1,10 @@
 package ar.edu.turnos.turnos.config;
 
 import ar.edu.turnos.turnos.authorization.infrastructure.security.UserJwtSubject;
+import jakarta.servlet.http.HttpServletRequest;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Set;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 import org.springframework.beans.factory.BeanCreationException;
@@ -27,6 +29,9 @@ import com.nimbusds.jose.jwk.source.ImmutableSecret;
 
 @Configuration
 public class SecurityConfiguration {
+    private static final Set<String> CSRF_EXEMPT_POST_PATHS = Set.of(
+            "/api/register", "/api/authenticate", "/api/reservation-processes");
+
     @Bean
     SecretKey userJwtKey(@Value("${turnos.security.jwt-secret}") String secret) {
         byte[] key = secret.getBytes(StandardCharsets.UTF_8);
@@ -63,7 +68,9 @@ public class SecurityConfiguration {
 
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationConverter converter) throws Exception {
-        return http.csrf(csrf -> csrf.disable())
+        // API sin sesión ni cookies de autenticación: el navegador no adjunta el JWT Bearer automáticamente.
+        // Excluir únicamente los POST actuales; cualquier nuevo endpoint conserva CSRF por defecto.
+        return http.csrf(csrf -> csrf.ignoringRequestMatchers(SecurityConfiguration::isCsrfExemptPost))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(requests -> requests
                         .requestMatchers(HttpMethod.POST, "/api/register", "/api/authenticate").permitAll()
@@ -73,5 +80,10 @@ public class SecurityConfiguration {
                         .anyRequest().denyAll())
                 .oauth2ResourceServer(oauth -> oauth.jwt(jwt -> jwt.jwtAuthenticationConverter(converter)))
                 .build();
+    }
+
+    private static boolean isCsrfExemptPost(HttpServletRequest request) {
+        String path = request.getRequestURI().substring(request.getContextPath().length());
+        return "POST".equals(request.getMethod()) && CSRF_EXEMPT_POST_PATHS.contains(path);
     }
 }
