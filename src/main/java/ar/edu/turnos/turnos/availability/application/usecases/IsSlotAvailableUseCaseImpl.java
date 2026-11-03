@@ -24,11 +24,11 @@ public class IsSlotAvailableUseCaseImpl implements IsSlotAvailableUseCase {
         try {
             return getAvailability.get(professionalId, date).availableStartTimes().contains(startTime)
                     ? Result.AVAILABLE : Result.OCCUPIED;
-        } catch (ProfessionalNotFoundException exception) {
+        } catch (ProfessionalNotFoundException _) {
             return Result.NOT_FOUND;
         } catch (AvailabilitySourceException exception) {
             return exception.invalidResponse() ? Result.INVALID_SOURCE_DATA : Result.SOURCE_UNAVAILABLE;
-        } catch (IllegalArgumentException exception) {
+        } catch (IllegalArgumentException _) {
             return Result.INVALID_REQUEST;
         }
     }

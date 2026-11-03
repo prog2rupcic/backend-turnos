@@ -44,22 +44,21 @@ public class ReservationProcessEntity {
 
     protected ReservationProcessEntity() { }
 
-    public ReservationProcessEntity(String id, long ownerUserId, long professionalId, LocalDate date,
-                                    LocalTime startTime, ReservationProcess.Status status, String holdId,
-                                    String reservationProcessId, Instant expiresAt, Instant createdAt,
-                                    Instant updatedAt, Long version) {
-        this.id = id;
-        this.ownerUserId = ownerUserId;
-        this.professionalId = professionalId;
-        this.date = date;
-        this.startTime = startTime;
-        this.status = status;
-        this.holdId = holdId;
-        this.reservationProcessId = reservationProcessId;
-        this.expiresAt = expiresAt;
-        this.createdAt = createdAt;
-        this.updatedAt = updatedAt;
-        this.version = version;
+    public static ReservationProcessEntity from(ReservationProcess process) {
+        var entity = new ReservationProcessEntity();
+        entity.id = process.id();
+        entity.ownerUserId = process.ownerUserId();
+        entity.professionalId = process.professionalId();
+        entity.date = process.date();
+        entity.startTime = process.startTime();
+        entity.status = process.status();
+        entity.holdId = process.holdId();
+        entity.reservationProcessId = process.reservationProcessId();
+        entity.expiresAt = process.expiresAt();
+        entity.createdAt = process.createdAt();
+        entity.updatedAt = process.updatedAt();
+        entity.version = process.version();
+        return entity;
     }
 
     public String getId() { return id; }

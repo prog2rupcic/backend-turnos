@@ -7,10 +7,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class ReservationProcessMapper {
     public ReservationProcessEntity toEntity(ReservationProcess process) {
-        return new ReservationProcessEntity(process.id(), process.ownerUserId(), process.professionalId(),
-                process.date(), process.startTime(), process.status(), process.holdId(),
-                process.reservationProcessId(), process.expiresAt(), process.createdAt(), process.updatedAt(),
-                process.version());
+        return ReservationProcessEntity.from(process);
     }
 
     public ReservationProcess toDomain(ReservationProcessEntity entity) {

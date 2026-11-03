@@ -60,7 +60,7 @@ public class CatedraHoldRestAdapter implements HoldGateway {
             return new CreatedHold(response.holdId(), response.reservationProcessId(), response.expiresAt());
         } catch (RestClientResponseException exception) {
             throw translate(exception);
-        } catch (RestClientException exception) {
+        } catch (RestClientException _) {
             // Tras enviar un POST, un timeout o una respuesta ilegible no prueba que no se creó el hold.
             throw new HoldCreationException(HoldCreationException.Reason.OUTCOME_UNKNOWN);
         }
@@ -89,7 +89,7 @@ public class CatedraHoldRestAdapter implements HoldGateway {
         try {
             var json = ERRORS.readTree(exception.getResponseBodyAsByteArray());
             return json.path("code").asText();
-        } catch (Exception malformed) {
+        } catch (Exception _) {
             return "";
         }
     }
