@@ -2,6 +2,8 @@ package ar.edu.turnos.turnos;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -260,6 +262,18 @@ class ReservationHttpTests extends AbstractIntegrationTest {
     }
 
     @Test
+    void csrfExemptionIsLimitedToTheExactConfirmationPostPathAndMethod() throws Exception {
+        mvc.perform(post("/api/reservation-processes/local-id/not-confirm")
+                        .header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/reservation-processes/local-id/confirm")
+                        .header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isForbidden());
+        mvc.perform(put("/api/reservation-processes").header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void malformedAcceptedResponseIsKeptAsAnUnknownOutcome() throws Exception {
         String processId = createHeldProcess();
         CONFIRM_REPLY.set(new Reply(202, "{\"reservationProcessId\":\"different-process\","
@@ -412,6 +426,11 @@ class ReservationHttpTests extends AbstractIntegrationTest {
         mvc.perform(post("/api/reservation-processes").contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", "Bearer " + jwt).content("""
                         {"professionalId":15,"date":"%s","startTime":"09:30:15"}
+                        """.formatted(date)))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_SLOT"));
+        mvc.perform(post("/api/reservation-processes").contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", "Bearer " + jwt).content("""
+                        {"professionalId":15,"date":"%s","startTime":"09:30:00.000000001"}
                         """.formatted(date)))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_SLOT"));
         mvc.perform(post("/api/reservation-processes").contentType(MediaType.APPLICATION_JSON)

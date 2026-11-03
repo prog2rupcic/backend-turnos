@@ -63,16 +63,19 @@ public class ConfirmHoldUseCaseImpl implements ConfirmHoldUseCase {
 
         ReservationProcess requesting = processRepository.save(
                 process.withStatus(ReservationProcess.Status.CONFIRM_REQUESTING, clock.instant()));
+        ConfirmedHold confirmation;
         try {
-            ConfirmedHold confirmation = holdGateway.confirm(requesting.holdId(), "user-" + ownerUserId,
+            confirmation = holdGateway.confirm(requesting.holdId(), "user-" + ownerUserId,
                     profile.firstName(), profile.lastName());
-            if (!requesting.reservationProcessId().equals(confirmation.reservationProcessId())) {
-                throw new HoldConfirmationException(HoldConfirmationException.Reason.OUTCOME_UNKNOWN);
-            }
-            return processRepository.save(requesting.waitingForPhone(confirmation.expiresAt(), clock.instant()));
         } catch (HoldConfirmationException exception) {
             return handleConfirmationFailure(requesting, exception);
         }
+        if (!requesting.reservationProcessId().equals(confirmation.reservationProcessId())) {
+            processRepository.save(requesting.withStatus(ReservationProcess.Status.CONFIRM_OUTCOME_UNKNOWN,
+                    clock.instant()));
+            throw new HoldConfirmationException(HoldConfirmationException.Reason.OUTCOME_UNKNOWN, requesting.id());
+        }
+        return processRepository.save(requesting.waitingForPhone(confirmation.expiresAt(), clock.instant()));
     }
 
     private ReservationProcess handleConfirmationFailure(ReservationProcess requesting,
