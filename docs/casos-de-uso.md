@@ -30,6 +30,8 @@ Este servicio administra los usuarios finales, su autenticación, los procesos l
 
 TUR-04 ya persiste `ownerUserId` derivado del JWT y verifica mediante pruebas que un cuerpo con otro ID no cambia el propietario. TUR-05 valida la propiedad antes de confirmar; TUR-10 añadirá lectura del proceso propio. Crear un hold no recibe un ID de proceso ajeno.
 
+**Estado de TUR-06:** implementado. El consumidor valida `AdditionalInformationRequested` (v1, `requiredField=PHONE_NUMBER`, clave Kafka igual a `reservationProcessId`) y persiste `requestEventId`, `requiredField`, `message` y `expiresAt` en el proceso, con deduplicación por `requestEventId` y sin reabrir estados terminales. Acepta el evento desde `HELD` o desde los estados de confirmación pendientes, de modo que puede adelantarse a la respuesta REST de TUR-05. El offset se confirma después del commit y los mensajes inválidos, de procesos desconocidos o con otro `holdId` se descartan sin bloquear la partición. La decisión está en `docs/adr-consumo-kafka.md`.
+
 ## Reglas compartidas
 
 - TUR-01 y TUR-02 **pertenecen a este backend**. El JWT de usuario se firma con HS256: `iss=backend-turnos`, `sub=user-{id}`, audiencias `backend-turnos` y `backend-catalogo`, y autoridades en el claim `authorities`. Ambos servicios comparten la clave de firma mediante configuración externa; el JWT técnico de cátedra es independiente.

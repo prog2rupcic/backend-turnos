@@ -9,6 +9,8 @@ import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface JpaReservationProcessRepository extends JpaRepository<ReservationProcessEntity, String> {
+    Optional<ReservationProcessEntity> findByReservationProcessId(String reservationProcessId);
+
     Optional<ReservationProcessEntity> findFirstByOwnerUserIdAndProfessionalIdAndDateAndStartTimeAndStatusInOrderByCreatedAtDesc(
             long ownerUserId, long professionalId, LocalDate date, LocalTime startTime,
             Collection<ReservationProcess.Status> statuses);

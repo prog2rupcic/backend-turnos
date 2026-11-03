@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import ar.edu.turnos.turnos.reservation.application.exception.HoldConfirmationException;
 import ar.edu.turnos.turnos.reservation.application.usecases.ConfirmHoldUseCaseImpl;
+import ar.edu.turnos.turnos.reservation.domain.model.AdditionalInformationRequest;
 import ar.edu.turnos.turnos.reservation.domain.model.ConfirmedHold;
 import ar.edu.turnos.turnos.reservation.domain.model.CreatedHold;
 import ar.edu.turnos.turnos.reservation.domain.model.PatientProfile;
@@ -104,6 +105,17 @@ class ConfirmHoldUseCaseTests {
                         ReservationProcess.Status.WAITING_FOR_PHONE);
     }
 
+    @Test
+    void kafkaMayStoreThePhoneRequestWhileTheRestConfirmationIsInFlight() {
+        var repository = new FakeRepository(heldProcess());
+        repository.conflictOnNextWaitingForPhoneSave = true;
+
+        var result = useCase(repository, validProfile(), successfulGateway()).confirm("local-id", OWNER_ID);
+
+        assertThat(result.status()).isEqualTo(ReservationProcess.Status.WAITING_FOR_PHONE);
+        assertThat(result.requestEventId()).isEqualTo("request-event");
+    }
+
     private static ConfirmHoldUseCaseImpl useCase(FakeRepository repository,
                                                    ReservationUserProfileProvider profiles,
                                                    HoldGateway gateway) {
@@ -146,7 +158,7 @@ class ConfirmHoldUseCaseTests {
 
     private static ReservationProcess process(ReservationProcess.Status status, String holdId, String externalId) {
         return new ReservationProcess("local-id", OWNER_ID, 15, LocalDate.of(2026, 11, 9),
-                LocalTime.of(9, 30), status, holdId, externalId, EXPIRES_AT, NOW, NOW, 0L);
+                LocalTime.of(9, 30), status, holdId, externalId, EXPIRES_AT, null, null, null, NOW, NOW, 0L);
     }
 
     private static void assertReason(org.assertj.core.api.ThrowableAssert.ThrowingCallable action,
@@ -163,6 +175,7 @@ class ConfirmHoldUseCaseTests {
     private static final class FakeRepository implements ReservationProcessRepository {
         private ReservationProcess current;
         private final java.util.List<ReservationProcess> saved = new java.util.ArrayList<>();
+        private boolean conflictOnNextWaitingForPhoneSave;
 
         private FakeRepository(ReservationProcess initial) {
             current = initial;
@@ -170,6 +183,14 @@ class ConfirmHoldUseCaseTests {
 
         @Override
         public ReservationProcess save(ReservationProcess process) {
+            if (conflictOnNextWaitingForPhoneSave
+                    && process.status() == ReservationProcess.Status.WAITING_FOR_PHONE) {
+                conflictOnNextWaitingForPhoneSave = false;
+                current = process.withPhoneRequest(new AdditionalInformationRequest("request-event", "external-id",
+                        "hold-id", "PHONE_NUMBER", "Ingrese un teléfono", process.expiresAt(), NOW), NOW);
+                throw new HoldConfirmationException(
+                        HoldConfirmationException.Reason.CONFIRMATION_IN_PROGRESS);
+            }
             current = process;
             saved.add(process);
             return process;
@@ -178,6 +199,12 @@ class ConfirmHoldUseCaseTests {
         @Override
         public Optional<ReservationProcess> findById(String id) {
             return current != null && current.id().equals(id) ? Optional.of(current) : Optional.empty();
+        }
+
+        @Override
+        public Optional<ReservationProcess> findByReservationProcessId(String reservationProcessId) {
+            return current != null && reservationProcessId.equals(current.reservationProcessId())
+                    ? Optional.of(current) : Optional.empty();
         }
 
         @Override

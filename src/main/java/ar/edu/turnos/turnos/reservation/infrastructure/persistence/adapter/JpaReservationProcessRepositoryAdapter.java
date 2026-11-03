@@ -47,6 +47,11 @@ public class JpaReservationProcessRepositoryAdapter implements ReservationProces
     }
 
     @Override
+    public Optional<ReservationProcess> findByReservationProcessId(String reservationProcessId) {
+        return repository.findByReservationProcessId(reservationProcessId).map(mapper::toDomain);
+    }
+
+    @Override
     public Optional<ReservationProcess> findUnresolved(long ownerUserId, long professionalId, LocalDate date,
                                                         LocalTime startTime) {
         return repository.findFirstByOwnerUserIdAndProfessionalIdAndDateAndStartTimeAndStatusInOrderByCreatedAtDesc(

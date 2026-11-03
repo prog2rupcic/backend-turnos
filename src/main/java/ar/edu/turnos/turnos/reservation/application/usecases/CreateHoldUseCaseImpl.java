@@ -44,7 +44,7 @@ public class CreateHoldUseCaseImpl implements CreateHoldUseCase {
         // Persistir el intento ANTES del POST: no hay clave de idempotencia ni GET por hold en cátedra.
         ReservationProcess intent = repository.save(new ReservationProcess(UUID.randomUUID().toString(), ownerUserId,
                 professionalId, date, startTime, ReservationProcess.Status.HOLD_REQUESTING, null, null, null,
-                now, now, null));
+                null, null, null, now, now, null));
         try {
             CreatedHold hold = gateway.create(professionalId, date, startTime, "user-" + ownerUserId);
             return repository.save(intent.withHold(hold.holdId(), hold.reservationProcessId(), hold.expiresAt(),
