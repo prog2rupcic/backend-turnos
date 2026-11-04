@@ -38,6 +38,6 @@ class JpaReservationProcessRepositoryAdapterTests {
         Instant now = Instant.parse("2026-11-03T17:00:00Z");
         return new ReservationProcess("local-id", 42, 15, LocalDate.of(2026, 11, 9),
                 LocalTime.of(9, 30), ReservationProcess.Status.CONFIRM_REQUESTING,
-                "hold-id", "external-id", now.plusSeconds(300), now, now, 2L);
+                "hold-id", "external-id", now.plusSeconds(300), null, null, null, now, now, 2L);
     }
 }

@@ -75,15 +75,28 @@ public class ConfirmHoldUseCaseImpl implements ConfirmHoldUseCase {
                     clock.instant()));
             throw new HoldConfirmationException(HoldConfirmationException.Reason.OUTCOME_UNKNOWN, requesting.id());
         }
-        return processRepository.save(requesting.waitingForPhone(confirmation.expiresAt(), clock.instant()));
+        return saveWaitingForPhone(requesting, confirmation.expiresAt());
+    }
+
+    private ReservationProcess saveWaitingForPhone(ReservationProcess process, Instant expiration) {
+        try {
+            return processRepository.save(process.waitingForPhone(expiration, clock.instant()));
+        } catch (HoldConfirmationException exception) {
+            // El consumidor Kafka pudo adelantarse y dejar el proceso ya en WAITING_FOR_PHONE.
+            if (exception.reason() == HoldConfirmationException.Reason.CONFIRMATION_IN_PROGRESS) {
+                return processRepository.findById(process.id())
+                        .filter(current -> current.status() == ReservationProcess.Status.WAITING_FOR_PHONE)
+                        .orElseThrow(() -> exception);
+            }
+            throw exception;
+        }
     }
 
     private ReservationProcess handleConfirmationFailure(ReservationProcess requesting,
                                                            HoldConfirmationException exception) {
         Instant now = clock.instant();
         return switch (exception.reason()) {
-            case ALREADY_CONFIRMED -> processRepository.save(
-                    requesting.waitingForPhone(requesting.expiresAt(), now));
+            case ALREADY_CONFIRMED -> saveWaitingForPhone(requesting, requesting.expiresAt());
             case OUTCOME_UNKNOWN -> {
                 processRepository.save(requesting.withStatus(ReservationProcess.Status.CONFIRM_OUTCOME_UNKNOWN, now));
                 throw new HoldConfirmationException(HoldConfirmationException.Reason.OUTCOME_UNKNOWN,

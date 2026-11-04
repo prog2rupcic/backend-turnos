@@ -34,6 +34,12 @@ public class ReservationProcessEntity {
     private String reservationProcessId;
     @Column(name = "expires_at")
     private Instant expiresAt;
+    @Column(name = "request_event_id", length = 100)
+    private String requestEventId;
+    @Column(name = "request_required_field", length = 32)
+    private String requestRequiredField;
+    @Column(name = "request_message", length = 2000)
+    private String requestMessage;
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
     @Column(name = "updated_at", nullable = false)
@@ -55,6 +61,9 @@ public class ReservationProcessEntity {
         entity.holdId = process.holdId();
         entity.reservationProcessId = process.reservationProcessId();
         entity.expiresAt = process.expiresAt();
+        entity.requestEventId = process.requestEventId();
+        entity.requestRequiredField = process.requestRequiredField();
+        entity.requestMessage = process.requestMessage();
         entity.createdAt = process.createdAt();
         entity.updatedAt = process.updatedAt();
         entity.version = process.version();
@@ -70,6 +79,9 @@ public class ReservationProcessEntity {
     public String getHoldId() { return holdId; }
     public String getReservationProcessId() { return reservationProcessId; }
     public Instant getExpiresAt() { return expiresAt; }
+    public String getRequestEventId() { return requestEventId; }
+    public String getRequestRequiredField() { return requestRequiredField; }
+    public String getRequestMessage() { return requestMessage; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
     public Long getVersion() { return version; }

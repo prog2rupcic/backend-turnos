@@ -39,4 +39,45 @@ Antes del POST externo se persiste el intento `HOLD_REQUESTING` en PostgreSQL co
 
 Una respuesta `202 WAITING_FOR_PHONE` persiste ese estado y devuelve `202` con el ID local y el vencimiento informado por cátedra; no representa una reserva confirmada. Si el proceso ya está esperando el teléfono, la petición local es idempotente y no repite el POST externo. Antes de llamar a cátedra se persiste `CONFIRM_REQUESTING`; un timeout o `5xx` produce `503 OUTCOME_UNKNOWN` y `CONFIRM_OUTCOME_UNKNOWN`, sin reintento automático. Un reintento explícito en ese estado puede converger cuando cátedra responda `RESERVATION_PROCESS_ALREADY_CONFIRMED`. `HOLD_EXPIRED` persiste el estado terminal `EXPIRED`. Los estados no resueltos permanecen protegidos por el índice único parcial por usuario y horario. La solicitud de teléfono y su `requestEventId` corresponden a TUR-06.
 
+## Recibir la solicitud de teléfono (TUR-06)
+
+El consumidor Kafka lee `AdditionalInformationRequested` del topic de acciones configurado (`TURNOS_KAFKA_ACTIONS_TOPIC`, por defecto `catedra.turnos.acciones`) usando `TURNOS_KAFKA_BOOTSTRAP_SERVERS` y `TURNOS_KAFKA_CONSUMER_GROUP_ID`. Se habilita explícitamente con `TURNOS_KAFKA_ENABLED=true`; sin esa variable el listener no se registra y el resto del backend funciona igual. No hay credenciales ni direcciones reales en el repositorio: todas se reciben desde `integration` y se configuran fuera de Git.
+
+Cada mensaje se valida contra el contrato v1: `eventType=AdditionalInformationRequested`, `schemaVersion=1`, `requiredField=PHONE_NUMBER`, identificadores no vacíos, instantes ISO-8601 y clave Kafka igual a `reservationProcessId`. Los campos desconocidos se ignoran. Un mensaje inválido, un proceso inexistente o un `holdId` distinto del persistido se registran con datos de diagnóstico y se descartan sin bloquear la partición.
+
+El evento se aplica aunque llegue antes de que se guarde la respuesta REST de TUR-05: se acepta desde `HELD`, `CONFIRM_REQUESTING`, `CONFIRM_OUTCOME_UNKNOWN` y `WAITING_FOR_PHONE`. Se guardan `eventId` como `requestEventId`, `requiredField`, `message` y el `expiresAt` informado, y el proceso pasa a `WAITING_FOR_PHONE`. El mismo `eventId` es idempotente y un estado terminal (`EXPIRED`/`FAILED`) no se reabre. La escritura y la marca de idempotencia se persisten en una sola transacción y el offset se confirma después del commit (`ack-mode=record`, autocommit desactivado). Los fallos transitorios se reintentan de forma acotada (3 reintentos con 2 s de espera) y luego se registran y se descartan, sin bloquear el resto de los mensajes.
+
+La respuesta tardía de TUR-05 detecta la carrera con `@Version`: si el consumidor ya dejó el proceso en `WAITING_FOR_PHONE`, la confirmación REST devuelve ese estado sin pisar `requestEventId`. La decisión completa está en [ADR: consumo Kafka de la solicitud de teléfono](docs/adr-consumo-kafka.md).
+
+## Docker Compose
+
+El backend y su PostgreSQL se ejecutan con `compose.yaml`. La aplicación participa de la red compartida `turnos-integracion` y resuelve el catálogo como `catalogo-api`; su base queda solo en la red privada `turnos-private`.
+
+1. Crear una sola vez la red compartida:
+
+```bash
+docker network create --driver bridge --subnet 172.29.0.0/16 turnos-integracion
+```
+
+2. Copiar `.env.example` a `.env` y completar, como mínimo:
+   - `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`: base propia de turnos.
+   - `SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/turnos`.
+   - `TURNOS_CATALOG_BASE_URL=http://catalogo-api:8080`.
+   - `TURNOS_KAFKA_*`, `CATEDRA_*` y `TURNOS_USER_JWT_SECRET` con los valores vigentes de integración.
+
+3. Levantar el servicio:
+
+```bash
+docker compose up -d --build
+```
+
+4. Verificar:
+
+```bash
+curl http://localhost:8080/actuator/health
+docker compose logs -f turnos
+```
+
+La aplicación queda en `127.0.0.1:8080` y la base en `127.0.0.1:5434` (este último solo para inspección). Kafka, Redis y cátedra son externos y deben ser alcanzables desde el contenedor, no solo desde el host. Para detener sin borrar datos: `docker compose down`; `docker compose down -v` también elimina el volumen `turnos_db`.
+
 Las pruebas requieren Docker para iniciar PostgreSQL con Testcontainers: `./mvnw --batch-mode --no-transfer-progress verify`. Esta fase genera `target/site/jacoco/index.html` y `target/site/jacoco/jacoco.xml` con la cobertura JaCoCo. El workflow `.github/workflows/backend-ci.yml` ejecuta `verify` en Java 25, comprueba el XML y lo importa en SonarCloud; requiere el secreto de GitHub Actions `SONAR_TOKEN` y las variables `SONAR_ORGANIZATION` y `SONAR_PROJECT_KEY`. En SonarCloud se desactiva Automatic Analysis para usar el análisis desde CI. Los informes Surefire y JaCoCo también quedan disponibles como artefactos del workflow.

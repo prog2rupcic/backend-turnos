@@ -13,7 +13,8 @@ public class ReservationProcessMapper {
     public ReservationProcess toDomain(ReservationProcessEntity entity) {
         return new ReservationProcess(entity.getId(), entity.getOwnerUserId(), entity.getProfessionalId(),
                 entity.getDate(), entity.getStartTime(), entity.getStatus(), entity.getHoldId(),
-                entity.getReservationProcessId(), entity.getExpiresAt(), entity.getCreatedAt(), entity.getUpdatedAt(),
-                entity.getVersion());
+                entity.getReservationProcessId(), entity.getExpiresAt(), entity.getRequestEventId(),
+                entity.getRequestRequiredField(), entity.getRequestMessage(), entity.getCreatedAt(),
+                entity.getUpdatedAt(), entity.getVersion());
     }
 }

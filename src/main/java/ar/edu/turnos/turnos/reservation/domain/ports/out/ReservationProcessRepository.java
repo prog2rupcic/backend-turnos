@@ -10,6 +10,8 @@ public interface ReservationProcessRepository {
 
     Optional<ReservationProcess> findById(String id);
 
+    Optional<ReservationProcess> findByReservationProcessId(String reservationProcessId);
+
     Optional<ReservationProcess> findUnresolved(long ownerUserId, long professionalId, LocalDate date,
                                                 LocalTime startTime);
 }
