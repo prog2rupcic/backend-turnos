@@ -40,6 +40,12 @@ public class ReservationProcessEntity {
     private String requestRequiredField;
     @Column(name = "request_message", length = 2000)
     private String requestMessage;
+    @Column(name = "reservation_id")
+    private Long reservationId;
+    @Column(name = "confirmed_at")
+    private Instant confirmedAt;
+    @Column(name = "rejection_reason", length = 100)
+    private String rejectionReason;
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
     @Column(name = "updated_at", nullable = false)
@@ -64,6 +70,9 @@ public class ReservationProcessEntity {
         entity.requestEventId = process.requestEventId();
         entity.requestRequiredField = process.requestRequiredField();
         entity.requestMessage = process.requestMessage();
+        entity.reservationId = process.reservationId();
+        entity.confirmedAt = process.confirmedAt();
+        entity.rejectionReason = process.rejectionReason();
         entity.createdAt = process.createdAt();
         entity.updatedAt = process.updatedAt();
         entity.version = process.version();
@@ -85,4 +94,7 @@ public class ReservationProcessEntity {
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
     public Long getVersion() { return version; }
+    public Long getReservationId() { return reservationId; }
+    public Instant getConfirmedAt() { return confirmedAt; }
+    public String getRejectionReason() { return rejectionReason; }
 }

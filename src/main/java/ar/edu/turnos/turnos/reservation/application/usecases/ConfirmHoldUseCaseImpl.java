@@ -85,7 +85,10 @@ public class ConfirmHoldUseCaseImpl implements ConfirmHoldUseCase {
             // El consumidor Kafka pudo adelantarse y dejar el proceso ya en WAITING_FOR_PHONE.
             if (exception.reason() == HoldConfirmationException.Reason.CONFIRMATION_IN_PROGRESS) {
                 return processRepository.findById(process.id())
-                        .filter(current -> current.status() == ReservationProcess.Status.WAITING_FOR_PHONE)
+                        .filter(current -> current.status() == ReservationProcess.Status.WAITING_FOR_PHONE
+                                || current.status() == ReservationProcess.Status.PHONE_SUBMISSION_PENDING
+                                || current.status() == ReservationProcess.Status.PHONE_SUBMITTED
+                                || current.status() == ReservationProcess.Status.CONFIRMED)
                         .orElseThrow(() -> exception);
             }
             throw exception;

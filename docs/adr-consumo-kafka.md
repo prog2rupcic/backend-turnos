@@ -2,6 +2,8 @@
 
 **Estado:** adoptado para TUR-06.
 
+**Evolución:** TUR-07/TUR-08/TUR-10 incorporan el registro genérico de eventos procesados y un solo listener con despacho por tipo. La restricción de `requestEventId` se mantiene; la decisión actual de deduplicación y publicación está en [ADR: outbox de teléfono](adr-outbox-telefono.md).
+
 ## Contexto
 
 Después de la confirmación REST inicial, cátedra publica `AdditionalInformationRequested` en el topic de acciones. El evento puede adelantarse a la respuesta REST de TUR-05 y Kafka garantiza entrega al menos una vez, por lo que puede repetirse. El contrato exige conservar el `eventId` como `requestEventId` para responder luego con el teléfono y confirmar el offset después de persistir.

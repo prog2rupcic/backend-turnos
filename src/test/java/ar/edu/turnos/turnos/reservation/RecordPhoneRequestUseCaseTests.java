@@ -118,7 +118,12 @@ class RecordPhoneRequestUseCaseTests {
     }
 
     private static RecordPhoneRequestUseCaseImpl useCase(FakeRepository repository) {
-        return new RecordPhoneRequestUseCaseImpl(repository, Clock.fixed(NOW, ZoneOffset.UTC));
+        var exchange = org.mockito.Mockito.mock(
+                ar.edu.turnos.turnos.reservation.domain.ports.out.PhoneExchangeRepository.class);
+        org.mockito.Mockito.when(exchange.markEvent(org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(true);
+        return new RecordPhoneRequestUseCaseImpl(repository, Clock.fixed(NOW, ZoneOffset.UTC), exchange);
     }
 
     private static AdditionalInformationRequest request(String eventId, String processId, String holdId) {
