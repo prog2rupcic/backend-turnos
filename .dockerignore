@@ -1,0 +1,11 @@
+.git
+.github
+.env
+.env.*
+!.env.example
+target
+docs
+README.md
+HELP.md
+issues.json
+sonarcloud.sh

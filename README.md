@@ -49,4 +49,35 @@ El evento se aplica aunque llegue antes de que se guarde la respuesta REST de TU
 
 La respuesta tardía de TUR-05 detecta la carrera con `@Version`: si el consumidor ya dejó el proceso en `WAITING_FOR_PHONE`, la confirmación REST devuelve ese estado sin pisar `requestEventId`. La decisión completa está en [ADR: consumo Kafka de la solicitud de teléfono](docs/adr-consumo-kafka.md).
 
+## Docker Compose
+
+El backend y su PostgreSQL se ejecutan con `compose.yaml`. La aplicación participa de la red compartida `turnos-integracion` y resuelve el catálogo como `catalogo-api`; su base queda solo en la red privada `turnos-private`.
+
+1. Crear una sola vez la red compartida:
+
+```bash
+docker network create --driver bridge --subnet 172.29.0.0/16 turnos-integracion
+```
+
+2. Copiar `.env.example` a `.env` y completar, como mínimo:
+   - `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`: base propia de turnos.
+   - `SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/turnos`.
+   - `TURNOS_CATALOG_BASE_URL=http://catalogo-api:8080`.
+   - `TURNOS_KAFKA_*`, `CATEDRA_*` y `TURNOS_USER_JWT_SECRET` con los valores vigentes de integración.
+
+3. Levantar el servicio:
+
+```bash
+docker compose up -d --build
+```
+
+4. Verificar:
+
+```bash
+curl http://localhost:8080/actuator/health
+docker compose logs -f turnos
+```
+
+La aplicación queda en `127.0.0.1:8080` y la base en `127.0.0.1:5434` (este último solo para inspección). Kafka, Redis y cátedra son externos y deben ser alcanzables desde el contenedor, no solo desde el host. Para detener sin borrar datos: `docker compose down`; `docker compose down -v` también elimina el volumen `turnos_db`.
+
 Las pruebas requieren Docker para iniciar PostgreSQL con Testcontainers: `./mvnw --batch-mode --no-transfer-progress verify`. Esta fase genera `target/site/jacoco/index.html` y `target/site/jacoco/jacoco.xml` con la cobertura JaCoCo. El workflow `.github/workflows/backend-ci.yml` ejecuta `verify` en Java 25, comprueba el XML y lo importa en SonarCloud; requiere el secreto de GitHub Actions `SONAR_TOKEN` y las variables `SONAR_ORGANIZATION` y `SONAR_PROJECT_KEY`. En SonarCloud se desactiva Automatic Analysis para usar el análisis desde CI. Los informes Surefire y JaCoCo también quedan disponibles como artefactos del workflow.
