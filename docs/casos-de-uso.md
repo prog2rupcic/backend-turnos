@@ -34,6 +34,8 @@ TUR-04 ya persiste `ownerUserId` derivado del JWT y verifica mediante pruebas qu
 
 ## Reglas compartidas
 
+**Estado de TUR-07/TUR-08/TUR-10:** implementados. El propietario consulta `GET /api/reservation-processes/{id}` y envía `POST /api/reservation-processes/{id}/phone`. El envío requiere la solicitud Kafka persistida, valida/normaliza el teléfono y guarda una outbox en la misma transacción. El productor publica con identidad estable, leasing y reintentos limitados. Un único listener procesa solicitud, confirmación y rechazo con deduplicación durable. La confirmación guarda `reservationId`; el rechazo permite una corrección con nuevo evento antes del plazo. La consulta no expone teléfonos y distingue estado funcional de estado de entrega. TUR-15 se aplica a ambos endpoints con tests de propiedad; listado/cancelación siguen pendientes. Ver [ADR](adr-outbox-telefono.md).
+
 - TUR-01 y TUR-02 **pertenecen a este backend**. El JWT de usuario se firma con HS256: `iss=backend-turnos`, `sub=user-{id}`, audiencias `backend-turnos` y `backend-catalogo`, y autoridades en el claim `authorities`. Ambos servicios comparten la clave de firma mediante configuración externa; el JWT técnico de cátedra es independiente.
 - La autenticación es stateless y utiliza el encabezado Bearer, nunca una cookie de sesión. CSRF permanece activo salvo para los POST REST de registro, login y creación de holds; las futuras rutas con efectos requieren una decisión explícita antes de excluirlas.
 - Solo se aceptan contraseñas hasheadas con Argon2id; no hay cuentas heredadas con BCrypt que migrar. Se almacena un único hash por usuario, nunca la contraseña en claro. La verificación del JWT es independiente del hash de contraseñas.

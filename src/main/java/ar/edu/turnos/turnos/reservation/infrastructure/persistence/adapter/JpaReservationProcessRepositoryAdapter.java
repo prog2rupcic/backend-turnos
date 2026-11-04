@@ -59,7 +59,9 @@ public class JpaReservationProcessRepositoryAdapter implements ReservationProces
                         ReservationProcess.Status.HELD, ReservationProcess.Status.HOLD_OUTCOME_UNKNOWN,
                         ReservationProcess.Status.CONFIRM_REQUESTING,
                         ReservationProcess.Status.CONFIRM_OUTCOME_UNKNOWN,
-                        ReservationProcess.Status.WAITING_FOR_PHONE))
+                        ReservationProcess.Status.WAITING_FOR_PHONE,
+                        ReservationProcess.Status.PHONE_SUBMISSION_PENDING,
+                        ReservationProcess.Status.PHONE_SUBMITTED))
                 .map(mapper::toDomain);
     }
 }

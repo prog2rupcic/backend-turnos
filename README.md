@@ -49,6 +49,32 @@ El evento se aplica aunque llegue antes de que se guarde la respuesta REST de TU
 
 La respuesta tardía de TUR-05 detecta la carrera con `@Version`: si el consumidor ya dejó el proceso en `WAITING_FOR_PHONE`, la confirmación REST devuelve ese estado sin pisar `requestEventId`. La decisión completa está en [ADR: consumo Kafka de la solicitud de teléfono](docs/adr-consumo-kafka.md).
 
+## Intercambio de teléfono y consulta de proceso (TUR-07, TUR-08 y TUR-10)
+
+`GET /api/reservation-processes/{id}` requiere `ROLE_USER` y propiedad local. Devuelve `id`, `status`, profesional/fecha/hora, `expiresAt`, `canSubmitPhone`, `message`, `rejectionReason`, `reservationId`, `confirmedAt` y `deliveryStatus`. El ID del path es el **local**, no el identificador externo de cátedra. Un JWT ausente recibe `401`, un proceso ajeno `403` y uno inexistente `404`. Android puede consultar periódicamente este endpoint. No se devuelve el teléfono ni el JWT técnico.
+
+`POST /api/reservation-processes/{id}/phone` recibe `{ "phoneNumber": "+54 (261) 555-1234" }`. Elimina espacios, guiones, paréntesis y puntos y exige `^\+?[0-9]{7,15}$`. Solo permite el envío con una solicitud Kafka recibida (`requestEventId` y `requiredField=PHONE_NUMBER`) y antes de `expiresAt`: un `202 WAITING_FOR_PHONE` REST sin solicitud Kafka **no basta**. Un teléfono inválido devuelve `400`; falta de solicitud, estado incompatible, otro envío en curso o plazo transcurrido devuelven `409` con un `code` estable. El POST Bearer stateless está excluido específicamente de CSRF, igual que los otros POST de la API.
+
+La respuesta `202` significa **persistido para envío**, no publicación ni reserva confirmada. La migración V5 incorpora la outbox `reservation_phone_submission`, el registro `reservation_processed_event` y los datos de confirmación/rechazo del proceso. El proceso y su evento pendiente se guardan en la misma transacción PostgreSQL. Un publicador recupera envíos pendientes, confirma Kafka con `acks=all` y productor idempotente, y reutiliza el mismo `eventId`, número normalizado e instante original ante un resultado incierto. Las consultas SQL de leasing y `SKIP LOCKED` están encapsuladas en el adaptador de persistencia; el dominio y los casos de uso no dependen de JDBC.
+
+Estados: `WAITING_FOR_PHONE → PHONE_SUBMISSION_PENDING → PHONE_SUBMITTED → CONFIRMED`; un rechazo vuelve a `WAITING_FOR_PHONE`. Una confirmación adelantada al acuse de publicación no retrocede. Cada ciclo toma hasta diez mensajes, con lease de 60 segundos y hasta cinco intentos con backoff de 2/4/8/16 segundos. Agotados los intentos, `deliveryStatus=RETRY_EXHAUSTED`; el propietario puede repetir el POST con el mismo teléfono para reactivar **el mismo evento**, siempre dentro del plazo. Repetir el POST mientras está pendiente/publicado no crea otro envío; intentar cambiar el teléfono antes de un rechazo devuelve `409`. Después de un rechazo, la corrección crea un evento nuevo.
+
+Los pendientes que superan su plazo quedan `ABANDONED`, sin afirmar que cátedra haya expirado el proceso. La expiración/invalidez autoritativa y la reconciliación funcional corresponden a TUR-09/TUR-14. Los registros de outbox conservan el teléfono para el reenvío durable; no se imprimen en logs ni se exponen por HTTP. Esta versión no implementa una política automática de purga de esos registros.
+
+Un único listener despacha el topic de acciones según `eventType`: solicitud, confirmación y rechazo. Valida grupo técnico, versión, clave, hold/solicitud y datos del horario para confirmar. La deduplicación de los tres tipos se persiste junto al efecto en la misma transacción, con offset posterior al commit. V5 inicializa las marcas de las solicitudes vigentes de TUR-06. No se reabren procesos `CONFIRMED`, `EXPIRED` o `FAILED`. Eventos desconocidos o inválidos se descartan sin bloquear la partición. Ver [ADR: outbox de teléfono](docs/adr-outbox-telefono.md).
+
+Configurar en `.env`:
+
+| Variable | Valor de integración |
+| --- | --- |
+| `TURNOS_KAFKA_PHONE_TOPIC` | `integration.kafkaAppointmentPhoneTopic` |
+| `TURNOS_INTEGRATION_GROUP_ID` | `integration.groupId`, **no** el consumer group |
+| `TURNOS_KAFKA_ACTIONS_TOPIC` | `integration.kafkaAppointmentActionsTopic` |
+| `TURNOS_KAFKA_ENABLED` | `true` para consumir/publicar |
+| `TURNOS_OUTBOX_INTERVAL` | Opcional, intervalo entre ciclos en milisegundos; por defecto `2000` |
+
+Sin grupo o topic de salida configurados no se aceptan nuevos envíos (`503 INTEGRATION_UNAVAILABLE`). Los tests usan PostgreSQL Testcontainers y Kafka embebido, sin credenciales reales; cubren el contrato saliente, confirmación/rechazo, aislamiento HTTP, concurrencia, rollback, duplicados, backoff agotado y recuperación de lease tras caída.
+
 ## Docker Compose
 
 El backend y su PostgreSQL se ejecutan con `compose.yaml`. La aplicación participa de la red compartida `turnos-integracion` y resuelve el catálogo como `catalogo-api`; su base queda solo en la red privada `turnos-private`.
