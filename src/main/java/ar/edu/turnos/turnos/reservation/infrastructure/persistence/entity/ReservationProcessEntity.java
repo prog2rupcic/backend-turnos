@@ -46,6 +46,8 @@ public class ReservationProcessEntity {
     private Instant confirmedAt;
     @Column(name = "rejection_reason", length = 100)
     private String rejectionReason;
+    @Column(name = "terminal_reason", length = 100)
+    private String terminalReason;
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
     @Column(name = "updated_at", nullable = false)
@@ -73,6 +75,7 @@ public class ReservationProcessEntity {
         entity.reservationId = process.reservationId();
         entity.confirmedAt = process.confirmedAt();
         entity.rejectionReason = process.rejectionReason();
+        entity.terminalReason = process.terminalReason();
         entity.createdAt = process.createdAt();
         entity.updatedAt = process.updatedAt();
         entity.version = process.version();
@@ -97,4 +100,5 @@ public class ReservationProcessEntity {
     public Long getReservationId() { return reservationId; }
     public Instant getConfirmedAt() { return confirmedAt; }
     public String getRejectionReason() { return rejectionReason; }
+    public String getTerminalReason() { return terminalReason; }
 }

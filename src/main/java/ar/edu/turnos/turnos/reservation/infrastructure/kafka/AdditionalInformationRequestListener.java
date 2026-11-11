@@ -58,7 +58,8 @@ public class AdditionalInformationRequestListener {
     }
 
     private void onResult(ConsumerRecord<String, String> record, String type) {
-        if (!"AppointmentConfirmed".equals(type) && !"AdditionalInformationRejected".equals(type)) {
+        if (!"AppointmentConfirmed".equals(type) && !"AdditionalInformationRejected".equals(type)
+                && !"AppointmentProcessExpired".equals(type) && !"AppointmentProcessInvalid".equals(type)) {
             LOG.info("Tipo de evento todavía no soportado partition={} offset={}", record.partition(), record.offset());
             return;
         }
@@ -70,6 +71,7 @@ public class AdditionalInformationRequestListener {
             return;
         }
         String outcome = resultUseCase.record(result);
-        LOG.info("Resultado de teléfono procesado eventId={} outcome={}", result.eventId(), outcome);
+        LOG.info("Resultado de proceso procesado eventId={} type={} outcome={} reason={}", result.eventId(),
+                result.type(), outcome, result.reason());
     }
 }

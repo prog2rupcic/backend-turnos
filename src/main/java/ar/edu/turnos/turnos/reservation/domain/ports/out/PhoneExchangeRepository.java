@@ -14,4 +14,5 @@ public interface PhoneExchangeRepository {
     void published(PhoneSubmission submission, Instant now);
     void failed(PhoneSubmission submission, Instant now);
     void resolve(String processId, PhoneSubmission.DeliveryStatus status);
+    void abandonPending(String processId);
 }

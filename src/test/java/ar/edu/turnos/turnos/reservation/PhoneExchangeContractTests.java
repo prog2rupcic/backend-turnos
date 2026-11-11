@@ -16,7 +16,7 @@ class PhoneExchangeContractTests {
     private final PhoneResultParser parser = new PhoneResultParser("proyecto-juan-perez");
 
     @Test
-    void parsesThePublishedConfirmationAndRejectionContractsWithUnknownFields() throws IOException {
+    void parsesThePublishedPhoneAndTerminalContractsWithUnknownFields() throws IOException {
         var confirmation = parser.parse(fixture("appointment-confirmed.json"), "process-a92b47d0");
         assertThat(confirmation.confirmed()).isTrue();
         assertThat(confirmation.reservationId()).isEqualTo(8251);
@@ -24,6 +24,12 @@ class PhoneExchangeContractTests {
         var rejection = parser.parse(fixture("additional-information-rejected.json"), "process-a92b47d0");
         assertThat(rejection.confirmed()).isFalse();
         assertThat(rejection.reason()).isEqualTo("INVALID_PHONE_NUMBER");
+        var expired = parser.parse(fixture("appointment-process-expired.json"), "process-a92b47d0");
+        assertThat(expired.type()).isEqualTo(ar.edu.turnos.turnos.reservation.domain.model.PhoneResult.Type.EXPIRED);
+        assertThat(expired.reason()).isEqualTo("HOLD_EXPIRED");
+        var invalid = parser.parse(fixture("appointment-process-invalid.json"), "process-a92b47d0");
+        assertThat(invalid.type()).isEqualTo(ar.edu.turnos.turnos.reservation.domain.model.PhoneResult.Type.INVALID);
+        assertThat(invalid.reason()).isEqualTo("REQUEST_EVENT_MISMATCH");
         assertThat(parser.parse(fixture("appointment-confirmed.json").replace("09:30", "09:30:00"),
                 "process-a92b47d0").startTime()).isEqualTo(LocalTime.of(9, 30));
     }
@@ -48,6 +54,22 @@ class PhoneExchangeContractTests {
         assertThatThrownBy(() -> parser.parse(payload.replace("\"schemaVersion\": 1", "\"schemaVersion\": 2"),
                 "process-a92b47d0")).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> parser.parse("not json", "process-a92b47d0")).isInstanceOf(RuntimeException.class);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"appointment-process-expired.json", "appointment-process-invalid.json"})
+    void rejectsMissingRequiredTerminalEventFields(String fixtureName) throws IOException {
+        var json = tools.jackson.databind.json.JsonMapper.builder().build();
+        var original = json.readTree(fixture(fixtureName));
+        for (String field : new String[] {"eventId", "eventType", "groupId", "reservationProcessId", "holdId",
+                "requestEventId", "reason", "occurredAt", "schemaVersion"}) {
+            var node = (tools.jackson.databind.node.ObjectNode) original.deepCopy();
+            node.remove(field);
+            String payload = json.writeValueAsString(node);
+            assertThatThrownBy(() -> parser.parse(payload, "process-a92b47d0"))
+                    .as("missing %s in %s", field, fixtureName)
+                    .isInstanceOf(RuntimeException.class);
+        }
     }
 
     @ParameterizedTest

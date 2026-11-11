@@ -283,6 +283,79 @@ class PhoneExchangeIntegrationTests extends AbstractIntegrationTest {
         assertThat(query.get(id, owner).canSubmitPhone()).isTrue();
     }
 
+    @Test
+    void expirationIsIdempotentTerminalAndAbandonsUnsentPhoneOutbox() throws Exception {
+        submit.submit(id, owner, "1234567");
+        var pending = exchange.latest(id).orElseThrow();
+        var expired = terminal("expired-event", PhoneResult.Type.EXPIRED, "HOLD_EXPIRED");
+
+        assertThat(results.record(expired)).isEqualTo("APPLIED");
+        assertThat(query.get(id, owner).process().status()).isEqualTo(ReservationProcess.Status.EXPIRED);
+        assertThat(query.get(id, owner).process().terminalReason()).isEqualTo("HOLD_EXPIRED");
+        assertThat(query.get(id, owner).canSubmitPhone()).isFalse();
+        assertThat(exchange.latest(id).orElseThrow().deliveryStatus())
+                .isEqualTo(PhoneSubmission.DeliveryStatus.ABANDONED);
+        assertThat(exchange.claim(Instant.now())).isEmpty();
+        assertThat(results.record(expired)).isEqualTo("DUPLICATE");
+        assertThat(results.record(confirmed("late-confirmation"))).isEqualTo("IGNORED");
+        assertThat(query.get(id, owner).process().terminalReason()).isEqualTo("HOLD_EXPIRED");
+        assertThat(exchange.latest(id).orElseThrow().eventId()).isEqualTo(pending.eventId());
+
+        mvc.perform(get(path()).header("Authorization", token(owner)))
+                .andExpect(status().isOk()).andExpect(jsonPath("status").value("EXPIRED"))
+                .andExpect(jsonPath("terminalReason").value("HOLD_EXPIRED"))
+                .andExpect(jsonPath("canSubmitPhone").value(false));
+    }
+
+    @Test
+    void invalidationIsDistinctFromFailureAndCannotBeReopened() {
+        var invalid = terminal("invalid-event", PhoneResult.Type.INVALID, "REQUEST_EVENT_MISMATCH");
+        assertThat(results.record(invalid)).isEqualTo("APPLIED");
+        assertThat(query.get(id, owner).process().status()).isEqualTo(ReservationProcess.Status.INVALID);
+        assertThat(query.get(id, owner).process().terminalReason()).isEqualTo("REQUEST_EVENT_MISMATCH");
+        assertThatThrownBy(() -> submit.submit(id, owner, "1234567"))
+                .isInstanceOf(PhoneExchangeException.class).hasMessage("INVALID_STATE");
+        assertThat(results.record(invalid)).isEqualTo("DUPLICATE");
+        assertThat(results.record(rejected("late-rejection"))).isEqualTo("IGNORED");
+        assertThat(query.get(id, owner).process().status()).isEqualTo(ReservationProcess.Status.INVALID);
+    }
+
+    @Test
+    void requestEventMismatchInvalidationCanCorrelateByProcessAndHold() {
+        var mismatchedRequestEvent = new PhoneResult("invalid-request-event", "test-integration", external,
+                "hold-test", "request-id-rejected-by-course", null, null, null, null,
+                "REQUEST_EVENT_MISMATCH", null, null, Instant.now(), PhoneResult.Type.INVALID);
+        assertThat(results.record(mismatchedRequestEvent)).isEqualTo("APPLIED");
+        assertThat(query.get(id, owner).process().status()).isEqualTo(ReservationProcess.Status.INVALID);
+        assertThat(query.get(id, owner).process().terminalReason()).isEqualTo("REQUEST_EVENT_MISMATCH");
+    }
+
+    @Test
+    void kafkaExpirationAndInvalidationEventsAreDispatchedAndPersisted() throws Exception {
+        send(terminalPayload("kafka-expired", "AppointmentProcessExpired", "HOLD_EXPIRED"));
+        Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+            assertThat(query.get(id, owner).process().status()).isEqualTo(ReservationProcess.Status.EXPIRED);
+            assertThat(query.get(id, owner).process().terminalReason()).isEqualTo("HOLD_EXPIRED");
+        });
+        send(terminalPayload("kafka-invalid", "AppointmentProcessInvalid", "REQUEST_EVENT_MISMATCH"));
+        assertThat(results.record(terminal("other-expiry", PhoneResult.Type.EXPIRED, "LATE")))
+                .isEqualTo("IGNORED");
+        assertThat(query.get(id, owner).process().status()).isEqualTo(ReservationProcess.Status.EXPIRED);
+    }
+
+    @Test
+    void kafkaInvalidationStoresReasonAndIgnoresDuplicates() throws Exception {
+        String payload = terminalPayload("kafka-invalid", "AppointmentProcessInvalid", "REQUEST_EVENT_MISMATCH");
+        send(payload);
+        Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+            assertThat(query.get(id, owner).process().status()).isEqualTo(ReservationProcess.Status.INVALID);
+            assertThat(query.get(id, owner).process().terminalReason()).isEqualTo("REQUEST_EVENT_MISMATCH");
+        });
+        send(payload);
+        Awaitility.await().during(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(3)).untilAsserted(() ->
+                assertThat(query.get(id, owner).process().status()).isEqualTo(ReservationProcess.Status.INVALID));
+    }
+
     private String path() { return "/api/reservation-processes/" + id; }
 
     private PhoneResult confirmed(String eventId) {
@@ -293,6 +366,19 @@ class PhoneExchangeIntegrationTests extends AbstractIntegrationTest {
     private PhoneResult rejected(String eventId) {
         return new PhoneResult(eventId, "test-integration", external, "hold-test", "request-test", null, null,
                 null, null, "INVALID_PHONE_NUMBER", "Corrija el teléfono", expiration, Instant.now());
+    }
+
+    private PhoneResult terminal(String eventId, PhoneResult.Type type, String reason) {
+        return new PhoneResult(eventId, "test-integration", external, "hold-test", "request-test", null, null,
+                null, null, reason, null, null, Instant.now(), type);
+    }
+
+    private String terminalPayload(String eventId, String type, String reason) {
+        return """
+                {"eventId":"%s","eventType":"%s","schemaVersion":1,"groupId":"test-integration",
+                 "reservationProcessId":"%s","holdId":"hold-test","requestEventId":"request-test",
+                 "reason":"%s","occurredAt":"%s","futureField":"ignored"}
+                """.formatted(eventId, type, external, reason, Instant.now());
     }
 
     private void send(String payload) throws Exception {

@@ -37,15 +37,31 @@ public class PhoneResultParser {
             }
             return new PhoneResult(value.eventId(), value.groupId(), value.reservationProcessId(), value.holdId(),
                     value.requestEventId(), value.reservationId(), value.professionalId(), LocalDate.parse(value.date()),
-                    LocalTime.parse(value.startTime()), null, null, null, occurredAt);
+                    LocalTime.parse(value.startTime()), null, null, null, occurredAt, PhoneResult.Type.CONFIRMED);
         }
-        if (!"AdditionalInformationRejected".equals(value.eventType()) || !validId(value.reason())
-                || value.message() == null || value.message().length() > 2000) {
-            throw new IllegalArgumentException("Rechazo inválido");
+        if (!validId(value.reason())) {
+            throw new IllegalArgumentException("Motivo del evento inválido");
         }
+        if ("AdditionalInformationRejected".equals(value.eventType())) {
+            if (value.message() == null || value.message().length() > 2000 || !validId(value.expiresAt())) {
+                throw new IllegalArgumentException("Rechazo inválido");
+            }
+            return new PhoneResult(value.eventId(), value.groupId(), value.reservationProcessId(), value.holdId(),
+                    value.requestEventId(), null, null, null, null, value.reason(), value.message(),
+                    Instant.parse(value.expiresAt()), occurredAt, PhoneResult.Type.REJECTED);
+        }
+        if ("AppointmentProcessExpired".equals(value.eventType())) {
+            return terminal(value, occurredAt, PhoneResult.Type.EXPIRED);
+        }
+        if ("AppointmentProcessInvalid".equals(value.eventType())) {
+            return terminal(value, occurredAt, PhoneResult.Type.INVALID);
+        }
+        throw new IllegalArgumentException("Tipo de evento de proceso no soportado");
+    }
+
+    private static PhoneResult terminal(Payload value, Instant occurredAt, PhoneResult.Type type) {
         return new PhoneResult(value.eventId(), value.groupId(), value.reservationProcessId(), value.holdId(),
-                value.requestEventId(), null, null, null, null, value.reason(), value.message(),
-                Instant.parse(value.expiresAt()), occurredAt);
+                value.requestEventId(), null, null, null, null, value.reason(), null, null, occurredAt, type);
     }
 
     private static boolean validId(String value) { return value != null && !value.isBlank() && value.length() <= 100; }
