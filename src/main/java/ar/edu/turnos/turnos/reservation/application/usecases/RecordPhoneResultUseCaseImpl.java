@@ -38,6 +38,9 @@ public class RecordPhoneResultUseCaseImpl implements RecordPhoneResultUseCase {
                 && !invalidRequestCorrelation)) { return "MISMATCH"; }
         if (!exchange.markEvent(result.eventId(), process.id(), clock.instant())) { return "DUPLICATE"; }
         if (process.status() == ReservationProcess.Status.CONFIRMED
+                || process.status() == ReservationProcess.Status.CANCEL_REQUESTING
+                || process.status() == ReservationProcess.Status.CANCEL_OUTCOME_UNKNOWN
+                || process.status() == ReservationProcess.Status.CANCELLED
                 || process.status() == ReservationProcess.Status.EXPIRED
                 || process.status() == ReservationProcess.Status.INVALID
                 || process.status() == ReservationProcess.Status.FAILED) { return "IGNORED"; }

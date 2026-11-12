@@ -167,6 +167,13 @@ class RecordPhoneRequestUseCaseTests {
         }
 
         @Override
+        public java.util.Map<String, ReservationProcess> findByReservationProcessIds(
+                java.util.Collection<String> ids) {
+            return current != null && ids.contains(current.reservationProcessId())
+                    ? java.util.Map.of(current.reservationProcessId(), current) : java.util.Map.of();
+        }
+
+        @Override
         public Optional<ReservationProcess> findUnresolved(long ownerUserId, long professionalId, LocalDate date,
                                                            LocalTime startTime) {
             return Optional.empty();

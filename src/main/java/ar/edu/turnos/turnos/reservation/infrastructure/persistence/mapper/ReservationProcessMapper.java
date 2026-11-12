@@ -16,6 +16,7 @@ public class ReservationProcessMapper {
                 entity.getReservationProcessId(), entity.getExpiresAt(), entity.getRequestEventId(),
                 entity.getRequestRequiredField(), entity.getRequestMessage(), entity.getCreatedAt(),
                 entity.getUpdatedAt(), entity.getVersion(), entity.getReservationId(), entity.getConfirmedAt(),
-                entity.getRejectionReason(), entity.getTerminalReason());
+                entity.getRejectionReason(), entity.getTerminalReason(), entity.getCancelledAt(),
+                entity.getCancellationReason());
     }
 }

@@ -33,6 +33,7 @@ public class SecurityConfiguration {
             "/api/register", "/api/authenticate", "/api/reservation-processes");
     private static final String CONFIRM_PROCESS_PATH = "/api/reservation-processes/[^/]+/confirm";
     private static final String PHONE_PROCESS_PATH = "/api/reservation-processes/[^/]+/phone";
+    private static final String CANCEL_RESERVATION_PATH = "/api/reservations/[^/]+/cancel";
 
     @Bean
     SecretKey userJwtKey(@Value("${turnos.security.jwt-secret}") String secret) {
@@ -82,6 +83,8 @@ public class SecurityConfiguration {
                          .requestMatchers(HttpMethod.POST, "/api/reservation-processes/*/confirm").hasAuthority("ROLE_USER")
                         .requestMatchers(HttpMethod.POST, "/api/reservation-processes/*/phone").hasAuthority("ROLE_USER")
                         .requestMatchers(HttpMethod.GET, "/api/reservation-processes/*").hasAuthority("ROLE_USER")
+                        .requestMatchers(HttpMethod.GET, "/api/reservations").hasAuthority("ROLE_USER")
+                        .requestMatchers(HttpMethod.POST, "/api/reservations/*/cancel").hasAuthority("ROLE_USER")
                         .anyRequest().denyAll())
                 .oauth2ResourceServer(oauth -> oauth.jwt(jwt -> jwt.jwtAuthenticationConverter(converter)))
                 .build();
@@ -90,6 +93,7 @@ public class SecurityConfiguration {
     private static boolean isCsrfExemptPost(HttpServletRequest request) {
         String path = request.getRequestURI().substring(request.getContextPath().length());
         return "POST".equals(request.getMethod()) && (CSRF_EXEMPT_POST_PATHS.contains(path)
-                || path.matches(CONFIRM_PROCESS_PATH) || path.matches(PHONE_PROCESS_PATH));
+                || path.matches(CONFIRM_PROCESS_PATH) || path.matches(PHONE_PROCESS_PATH)
+                || path.matches(CANCEL_RESERVATION_PATH));
     }
 }

@@ -4,6 +4,7 @@ import ar.edu.turnos.turnos.reservation.domain.model.AdditionalInformationReques
 import ar.edu.turnos.turnos.reservation.domain.model.PhoneRequestOutcome;
 import ar.edu.turnos.turnos.reservation.domain.ports.in.RecordPhoneRequestUseCase;
 import ar.edu.turnos.turnos.reservation.domain.ports.in.RecordPhoneResultUseCase;
+import ar.edu.turnos.turnos.reservation.domain.ports.in.RecordCancellationUseCase;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,14 +21,20 @@ public class AdditionalInformationRequestListener {
     private final RecordPhoneRequestUseCase useCase;
     private final PhoneResultParser resultParser;
     private final RecordPhoneResultUseCase resultUseCase;
+    private final CancellationNoticeParser cancellationParser;
+    private final RecordCancellationUseCase cancellationUseCase;
 
     public AdditionalInformationRequestListener(AdditionalInformationRequestParser parser,
-                                                RecordPhoneRequestUseCase useCase, PhoneResultParser resultParser,
-                                                RecordPhoneResultUseCase resultUseCase) {
+                                                 RecordPhoneRequestUseCase useCase, PhoneResultParser resultParser,
+                                                 RecordPhoneResultUseCase resultUseCase,
+                                                 CancellationNoticeParser cancellationParser,
+                                                 RecordCancellationUseCase cancellationUseCase) {
         this.parser = parser;
         this.useCase = useCase;
         this.resultParser = resultParser;
         this.resultUseCase = resultUseCase;
+        this.cancellationParser = cancellationParser;
+        this.cancellationUseCase = cancellationUseCase;
     }
 
     @KafkaListener(topics = "${turnos.kafka.actions-topic}", groupId = "${spring.kafka.consumer.group-id}")
@@ -40,6 +47,10 @@ public class AdditionalInformationRequestListener {
             return;
         }
         if (!"AdditionalInformationRequested".equals(type)) {
+            if ("AppointmentCancelled".equals(type)) {
+                onCancelled(record);
+                return;
+            }
             onResult(record, type);
             return;
         }
@@ -55,6 +66,19 @@ public class AdditionalInformationRequestListener {
         PhoneRequestOutcome outcome = useCase.record(request);
         LOG.info("Solicitud de teléfono procesada eventId={} reservationProcessId={} outcome={}",
                 request.eventId(), request.reservationProcessId(), outcome);
+    }
+
+    private void onCancelled(ConsumerRecord<String, String> record) {
+        ar.edu.turnos.turnos.reservation.domain.model.CancellationNotice notice;
+        try {
+            notice = cancellationParser.parse(record.value(), record.key());
+        } catch (RuntimeException _) {
+            LOG.warn("Se descarta cancelación Kafka inválida partition={} offset={}",
+                    record.partition(), record.offset());
+            return;
+        }
+        String outcome = cancellationUseCase.record(notice);
+        LOG.info("Cancelación procesada eventId={} outcome={}", notice.eventId(), outcome);
     }
 
     private void onResult(ConsumerRecord<String, String> record, String type) {

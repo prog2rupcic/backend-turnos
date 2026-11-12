@@ -8,12 +8,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import ar.edu.turnos.turnos.reservation.domain.model.PhoneExchangeException;
+import ar.edu.turnos.turnos.reservation.domain.model.CancellationNotice;
 import ar.edu.turnos.turnos.reservation.domain.model.PhoneResult;
 import ar.edu.turnos.turnos.reservation.domain.model.PhoneSubmission;
 import ar.edu.turnos.turnos.reservation.domain.model.ReservationProcess;
 import ar.edu.turnos.turnos.reservation.domain.ports.in.GetReservationProcessUseCase;
 import ar.edu.turnos.turnos.reservation.domain.ports.in.PublishPhoneOutboxUseCase;
 import ar.edu.turnos.turnos.reservation.domain.ports.in.RecordPhoneResultUseCase;
+import ar.edu.turnos.turnos.reservation.domain.ports.in.RecordCancellationUseCase;
 import ar.edu.turnos.turnos.reservation.domain.ports.in.SubmitPhoneUseCase;
 import ar.edu.turnos.turnos.reservation.domain.ports.out.PhoneExchangeRepository;
 import ar.edu.turnos.turnos.reservation.domain.ports.out.ReservationProcessRepository;
@@ -65,6 +67,7 @@ class PhoneExchangeIntegrationTests extends AbstractIntegrationTest {
     @Autowired GetReservationProcessUseCase query;
     @Autowired PublishPhoneOutboxUseCase outbox;
     @Autowired RecordPhoneResultUseCase results;
+    @Autowired RecordCancellationUseCase cancellations;
     @Autowired PhoneExchangeRepository exchange;
     @Autowired ReservationProcessRepository processes;
     @Autowired JpaReservationProcessRepository entities;
@@ -281,6 +284,54 @@ class PhoneExchangeIntegrationTests extends AbstractIntegrationTest {
                 c.reservationId(), c.professionalId(), c.date(), c.startTime(), null, null, null, c.occurredAt());
         assertThat(results.record(wrong)).isEqualTo("MISMATCH");
         assertThat(query.get(id, owner).canSubmitPhone()).isTrue();
+    }
+
+    @Test
+    void kafkaCancellationConvergesWithoutReopeningOrDuplicatingTheProcess() throws Exception {
+        var current = processes.findById(id).orElseThrow();
+        processes.save(current.confirmed(8251, Instant.now(), Instant.now()));
+        var event = """
+                {"eventId":"cancel-kafka","eventType":"AppointmentCancelled","schemaVersion":1,
+                 "groupId":"test-integration","reservationProcessId":"%s","holdId":"hold-test",
+                 "requestEventId":"request-test","reservationId":8251,"professionalId":15,
+                 "date":"2026-11-09","startTime":"09:30","status":"CANCELLED",
+                 "reason":null,"occurredAt":"2026-11-10T14:00:00Z","extra":"ignored"}
+                """.formatted(external);
+        send(event);
+        Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+            assertThat(query.get(id, owner).process().status()).isEqualTo(ReservationProcess.Status.CANCELLED);
+            assertThat(query.get(id, owner).process().cancelledAt())
+                    .isEqualTo(Instant.parse("2026-11-10T14:00:00Z"));
+        });
+        var notice = new CancellationNotice("cancel-kafka", external, "hold-test", "request-test", 8251, 15,
+                LocalDate.of(2026, 11, 9), LocalTime.of(9, 30), null, Instant.parse("2026-11-10T14:00:00Z"));
+        assertThat(cancellations.record(notice)).isEqualTo("DUPLICATE");
+        assertThat(results.record(confirmed("late-confirm-after-cancel"))).isEqualTo("IGNORED");
+        assertThat(query.get(id, owner).process().status()).isEqualTo(ReservationProcess.Status.CANCELLED);
+        mvc.perform(get(path()).header("Authorization", token(owner)))
+                .andExpect(status().isOk()).andExpect(jsonPath("status").value("CANCELLED"));
+        mvc.perform(get(path()).header("Authorization", token(owner + 1))).andExpect(status().isForbidden());
+    }
+
+    @Test
+    void mismatchedKafkaCancellationNeverAffectsAnotherReservation() {
+        var current = processes.findById(id).orElseThrow();
+        processes.save(current.confirmed(8251, Instant.now(), Instant.now()));
+        var wrong = new CancellationNotice("cancel-wrong", external, "hold-test", "request-test", 9999, 15,
+                LocalDate.of(2026, 11, 9), LocalTime.of(9, 30), null, Instant.now());
+        assertThat(cancellations.record(wrong)).isEqualTo("MISMATCH");
+        assertThat(query.get(id, owner).process().status()).isEqualTo(ReservationProcess.Status.CONFIRMED);
+    }
+
+    @Test
+    void cancellationConvergesWhenConfirmationKafkaNotificationWasLost() {
+        var notice = new CancellationNotice("cancel-without-confirmation", external, "hold-test", "request-test",
+                8251, 15, LocalDate.of(2026, 11, 9), LocalTime.of(9, 30), null, Instant.now());
+        assertThat(cancellations.record(notice)).isEqualTo("APPLIED");
+        var updated = query.get(id, owner).process();
+        assertThat(updated.status()).isEqualTo(ReservationProcess.Status.CANCELLED);
+        assertThat(updated.reservationId()).isEqualTo(8251);
+        assertThat(results.record(confirmed("late-confirmation-after-cancellation"))).isEqualTo("IGNORED");
     }
 
     @Test
