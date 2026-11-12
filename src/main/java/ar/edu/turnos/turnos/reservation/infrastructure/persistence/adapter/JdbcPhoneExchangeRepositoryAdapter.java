@@ -116,6 +116,14 @@ public class JdbcPhoneExchangeRepositoryAdapter implements PhoneExchangeReposito
                 """, status.name(), processId);
     }
 
+    @Override
+    public void abandonPending(String processId) {
+        jdbc.update("""
+                UPDATE reservation_phone_submission SET delivery_status='ABANDONED'
+                WHERE process_id=? AND delivery_status IN ('PENDING','IN_FLIGHT','RETRY_EXHAUSTED')
+                """, processId);
+    }
+
     private static PhoneSubmission map(ResultSet row) throws SQLException {
         return new PhoneSubmission(row.getString("event_id"), row.getString("process_id"),
                 row.getString("group_id"), row.getString("external_process_id"), row.getString("hold_id"),

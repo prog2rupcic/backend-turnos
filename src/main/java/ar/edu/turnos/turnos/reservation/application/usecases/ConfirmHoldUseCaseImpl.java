@@ -106,7 +106,7 @@ public class ConfirmHoldUseCaseImpl implements ConfirmHoldUseCase {
                         requesting.id());
             }
             case HOLD_EXPIRED -> {
-                processRepository.save(requesting.withStatus(ReservationProcess.Status.EXPIRED, now));
+                processRepository.save(requesting.terminal(ReservationProcess.Status.EXPIRED, "HOLD_EXPIRED", now));
                 throw new HoldConfirmationException(exception.reason(), requesting.id());
             }
             case INTEGRATION_UNAVAILABLE -> {

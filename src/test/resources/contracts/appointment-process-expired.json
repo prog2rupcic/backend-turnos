@@ -1,0 +1,12 @@
+{
+  "eventId": "process-event-7d12",
+  "eventType": "AppointmentProcessExpired",
+  "groupId": "proyecto-juan-perez",
+  "reservationProcessId": "process-a92b47d0",
+  "holdId": "hold-6c0c2f41",
+  "requestEventId": "request-event-8a31",
+  "reason": "HOLD_EXPIRED",
+  "occurredAt": "2026-09-10T14:44:52Z",
+  "schemaVersion": 1,
+  "futureField": "ignored"
+}

@@ -2,6 +2,8 @@
 
 **Estado:** adoptado para TUR-07/TUR-08/TUR-10 (issue #19).
 
+**Extensión:** TUR-09 agrega estados terminales `EXPIRED`/`INVALID`, `terminalReason` y abandono atómico de los envíos aún pendientes. La política de reconciliación de operaciones inciertas continúa en TUR-14; ver [ADR: vencimiento e invalidez](adr-vencimiento-invalidez.md).
+
 ## Problema
 
 PostgreSQL y Kafka no comparten una transacción. Guardar primero un estado de envío y caer antes de publicar pierde la respuesta a cátedra; publicar primero y caer antes de persistir pierde la identidad del envío. El acuse del broker tampoco equivale a confirmación funcional.
