@@ -6,10 +6,13 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.Collection;
 import java.util.Optional;
+import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface JpaReservationProcessRepository extends JpaRepository<ReservationProcessEntity, String> {
     Optional<ReservationProcessEntity> findByReservationProcessId(String reservationProcessId);
+
+    List<ReservationProcessEntity> findByReservationProcessIdIn(Collection<String> reservationProcessIds);
 
     Optional<ReservationProcessEntity> findFirstByOwnerUserIdAndProfessionalIdAndDateAndStartTimeAndStatusInOrderByCreatedAtDesc(
             long ownerUserId, long professionalId, LocalDate date, LocalTime startTime,

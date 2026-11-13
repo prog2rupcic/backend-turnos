@@ -75,6 +75,14 @@ Configurar en `.env`:
 
 Sin grupo o topic de salida configurados no se aceptan nuevos envíos (`503 INTEGRATION_UNAVAILABLE`). Los tests usan PostgreSQL Testcontainers y Kafka embebido, sin credenciales reales; cubren el contrato saliente, confirmación/rechazo, aislamiento HTTP, concurrencia, rollback, duplicados, backoff agotado y recuperación de lease tras caída.
 
+## Mis reservas y cancelación (TUR-11, TUR-12 y TUR-13)
+
+`GET /api/reservations?page=0&size=20` requiere `ROLE_USER`; `size` admite 1–100. Consulta `GET /api/appointments` de cátedra con JWT técnico y `externalPatientId=user-{id}` derivado del JWT propio. Cátedra lista toda la cuenta técnica: antes de devolver cada registro se coteja su `reservationProcessId`, propietario local, profesional, fecha, hora e ID de reserva (si ya se conoce). La respuesta propia incluye `content`, `totalElements`, `page` y `size`, ordenados como cátedra, y el **ID local** en cada elemento. No incluye `patientPhone` ni datos del JWT técnico. La paginación se realiza tras verificar la propiedad, recorriendo páginas remotas de hasta 100 registros (máximo 10 000 por consulta). Si se supera el límite o falla cátedra se devuelve error sin mostrar una lista incompleta.
+
+`POST /api/reservations/{processId}/cancel` recibe opcionalmente `{ "reason": "..." }` (hasta 500 caracteres); el path usa el ID **local**. Se comprueba propiedad y estado `CONFIRMED` antes de llamar al endpoint REST de cátedra con el identificador externo y JWT técnico. Se guarda `CANCEL_REQUESTING` y el motivo **antes** de llamar a cátedra. Un `200 CANCELLED` válido persiste `CANCELLED`, `cancelledAt` y motivo; volver a cancelar localmente responde sin otro POST externo. Un timeout, 5xx o resultado REST ambiguo deja `CANCEL_OUTCOME_UNKNOWN` y devuelve `503 OUTCOME_UNKNOWN`, sin repetir el POST: TUR-14 reconciliará el resultado. Un 401/403 del JWT técnico devuelve `503 INTEGRATION_UNAVAILABLE` y restablece `CONFIRMED`, no invalida el JWT del usuario. El endpoint Bearer stateless queda excluido puntualmente del CSRF de Spring Security.
+
+El mismo consumidor de acciones Kafka procesa `AppointmentCancelled`: valida integración, contrato v1, message key y coincidencia con proceso, hold, solicitud, reserva y horario local. Guarda el `eventId` y el estado en una transacción; si llega antes que la respuesta REST, esta última relee y devuelve `CANCELLED` sin retroceder el estado ni perder el motivo del evento. Una cancelación confirmada no se reabre por eventos atrasados. La migración V7 agrega `cancelled_at` y `cancellation_reason`. Ver [ADR de reservas propias y cancelación](docs/adr-reservas-propias.md).
+
 ## Docker Compose
 
 El backend y su PostgreSQL se ejecutan con `compose.yaml`. La aplicación participa de la red compartida `turnos-integracion` y resuelve el catálogo como `catalogo-api`; su base queda solo en la red privada `turnos-private`.

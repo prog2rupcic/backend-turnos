@@ -10,6 +10,9 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Collection;
+import java.util.Map;
+import java.util.stream.Collectors;
 import java.sql.SQLException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
@@ -49,6 +52,13 @@ public class JpaReservationProcessRepositoryAdapter implements ReservationProces
     @Override
     public Optional<ReservationProcess> findByReservationProcessId(String reservationProcessId) {
         return repository.findByReservationProcessId(reservationProcessId).map(mapper::toDomain);
+    }
+
+    @Override
+    public Map<String, ReservationProcess> findByReservationProcessIds(Collection<String> ids) {
+        if (ids.isEmpty()) { return Map.of(); }
+        return repository.findByReservationProcessIdIn(ids).stream().map(mapper::toDomain)
+                .collect(Collectors.toMap(ReservationProcess::reservationProcessId, process -> process));
     }
 
     @Override

@@ -66,7 +66,10 @@ public class RecordPhoneRequestUseCaseImpl implements RecordPhoneRequestUseCase 
     private static boolean isTerminal(ReservationProcess.Status status) {
         return status == ReservationProcess.Status.EXPIRED || status == ReservationProcess.Status.INVALID
                 || status == ReservationProcess.Status.FAILED
-                || status == ReservationProcess.Status.CONFIRMED;
+                || status == ReservationProcess.Status.CONFIRMED
+                || status == ReservationProcess.Status.CANCEL_REQUESTING
+                || status == ReservationProcess.Status.CANCEL_OUTCOME_UNKNOWN
+                || status == ReservationProcess.Status.CANCELLED;
     }
 
     private static boolean blank(String value) {
