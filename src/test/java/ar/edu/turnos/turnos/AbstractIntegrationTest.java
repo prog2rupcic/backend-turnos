@@ -8,7 +8,8 @@ import org.testcontainers.containers.PostgreSQLContainer;
 @TestPropertySource(properties = {
         "turnos.catalog.base-url=http://localhost:1",
         "turnos.catedra.base-url=http://localhost:1",
-        "turnos.catedra.technical-jwt=test-only-technical-jwt"
+        "turnos.catedra.technical-jwt=test-only-technical-jwt",
+        "turnos.recovery.enabled=false"
 })
 abstract class AbstractIntegrationTest {
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")

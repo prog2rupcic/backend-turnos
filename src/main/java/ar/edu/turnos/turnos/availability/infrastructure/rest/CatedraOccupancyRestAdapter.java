@@ -49,7 +49,7 @@ public class CatedraOccupancyRestAdapter implements OccupancySource {
             }
             try {
                 return response.occupancies().stream().map(occupancy -> new Occupancy(occupancy.date(),
-                        occupancy.startTime(), occupancy.status())).toList();
+                        occupancy.startTime(), occupancy.status(), occupancy.expiresAt())).toList();
             } catch (RuntimeException exception) {
                 throw new AvailabilitySourceException(true);
             }
@@ -67,6 +67,6 @@ public class CatedraOccupancyRestAdapter implements OccupancySource {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record OccupancyItem(LocalDate date, LocalTime startTime, Occupancy.Status status) {
+    record OccupancyItem(LocalDate date, LocalTime startTime, Occupancy.Status status, java.time.Instant expiresAt) {
     }
 }
