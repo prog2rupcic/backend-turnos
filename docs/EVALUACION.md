@@ -3,13 +3,13 @@
 
 > Documento **generado automáticamente** por la cátedra de Programación II (UM): RepoSense + análisis de calidad de **7 dimensiones**. **No editar a mano**: se regenera en cada evaluación.
 > Rama evaluada: `main`. Análisis **heurístico** (regex + métricas) + build: es una criba para orientar la revisión, **no una nota**. La **documentación** del repositorio no se evalúa.
-> Generado: 2026-11-12.
+> Generado: 2026-11-17.
 
 ## 1. Veredicto
 
 | Aspecto | Resultado |
 |---|---|
-| Índice de calidad | **35/100** |
+| Índice de calidad | **33/100** |
 | Tipo de repositorio | `backend` |
 | Build (`mvnw verify` / `gradlew check`) | no compila |
 | Código (LOC) | 18 |
@@ -41,7 +41,7 @@ Criterios de la cátedra (`CRITERIOS-CALIDAD.md`): **Aprobar** se juega con el p
 
 | Autor | Commits | Código (LOC) | Tests (LOC) | Docs (LOC) | Días activos | % del código |
 |---|---:|---:|---:|---:|---:|---:|
-| Juan Cruz Rupcic | 2 | 13 | 13 | 39 | 3 | 100% |
+| Juan Cruz Rupcic | 20 | 13 | 13 | 39 | 12 | 100% |
 
 > _El LOC de autoría lo calcula RepoSense sobre el historial y puede diferir del LOC de código del análisis (que mira el estado de `main`)._
 
@@ -51,7 +51,7 @@ Cada dimensión indica **qué mide**, **por qué importa** y **tu resultado**. C
 
 | Dimensión | Peso | Puntaje |
 |:--|--:|--:|
-| **D1** Diseño OO, SOLID y patrones (20%) | 20% | 58 |
+| **D1** Diseño OO, SOLID y patrones (20%) | 20% | 50 |
 | **D2** Arquitectura hexagonal — backend (15%) | 15% | 36 |
 | **D3** Frontend KMP: MVVM y buenas prácticas (10%) | 10% | N/A |
 | **D4** Integración y contrato (10%) | 10% | 0 |
@@ -63,7 +63,7 @@ Cada dimensión indica **qué mide**, **por qué importa** y **tu resultado**. C
 
 - **Qué mide:** Métricas orientadas a objetos (clases, métodos, campos, cohesión, acoplamiento, herencia) y proxies de SOLID, más patrones de diseño.
 - **Por qué importa:** El eje de la materia es el buen uso de la POO y su arquitectura: un diseño con clases claras y poco acopladas es más fácil de entender, probar y cambiar.
-- **Tu resultado:** **58/100**
+- **Tu resultado:** **50/100**
 - **Para investigar la causa:**
     - ¿Se pensó el modelo de clases antes de codificar o se agrupó después?
     - ¿Qué clases concentran muchas responsabilidades a la vez?
@@ -126,21 +126,23 @@ El análisis encontró las siguientes señales (archivo, sin número de línea a
 
 ## 6. Evolución por commit
 
-Métricas calculadas sobre el estado de `main` en **cada commit** (3 commits con trabajo), del primero al último. La calidad usa el perfil `exigente`; el aporte de código lo mide RepoSense. El índice puede **bajar** al crecer el proyecto: se acumulan señales.
+Métricas calculadas sobre el estado de `main` en **cada commit** (5 commits con trabajo), del primero al último. La calidad usa el perfil `exigente`; el aporte de código lo mide RepoSense. El índice puede **bajar** al crecer el proyecto: se acumulan señales.
 
 ```mermaid
 xychart-beta
     title "Índice de calidad a lo largo de los commits"
-    x-axis ["39be5e1", "3bd6d3e", "20adeae"]
+    x-axis ["39be5e1", "3bd6d3e", "20adeae", "fca4e63", "532cd01"]
     y-axis "Índice" 0 --> 100
-    line [0, 15, 35]
+    line [0, 15, 33, 66, 33]
 ```
 
 | # | Fecha | Commit | Autor | LOC | Índice | %POO | Duplic. | Sueltas |
 |---|---|---|---|---:|---:|---:|---:|---:|
 | 1 | 2026-09-07 | `39be5e1` | juancruz0912 | 0 | 0 | 0% | 0.0% | 0 |
 | 2 | 2026-09-15 | `3bd6d3e` | Ing. Daniel Quinteros | 0 | 15 | 0% | 0.0% | 0 |
-| 3 | 2026-10-13 | `20adeae` | Juan Cruz Rupcic | 18 | 35 | 56% | 0.0% | 0 |
+| 3 | 2026-10-13 | `20adeae` | Juan Cruz Rupcic | 18 | 33 | 56% | 0.0% | 0 |
+| 4 | 2026-11-12 | `fca4e63` | Juan Cruz Rupcic | 6,597 | 66 | 77% | 1.7% | 0 |
+| 5 | 2026-11-13 | `532cd01` | Juan Cruz Rupcic | 18 | 33 | 56% | 0.0% | 0 |
 
 ---
 _Informe generado por la cátedra. Las dimensiones y umbrales corresponden a `calidad.py` (perfil `exigente`); el semáforo, a `CRITERIOS-CALIDAD.md`. La documentación del repositorio no se evalúa. Ante dudas, revisá el archivo señalado._
